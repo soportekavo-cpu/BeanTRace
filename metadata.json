@@ -1,0 +1,5 @@
+{
+  "name": "BeanTrace - Sistema de Trazabilidad de Café",
+  "description": "Una aplicación completa para la gestión y trazabilidad de la exportación de café, desde la finca hasta el pago final. Gestiona contratos, usuarios, roles y el ciclo de vida completo del producto.",
+  "requestFramePermissions": []
+}
