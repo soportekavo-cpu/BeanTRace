@@ -24,9 +24,10 @@ const getStatusClass = (status: ContractStatus) => {
 
 interface ContractsPageProps {
   onCreateContractClick: () => void;
+  onViewDetails: (contract: Contract) => void;
 }
 
-const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) => {
+const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick, onViewDetails }) => {
     const [contracts, setContracts] = useState<Contract[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -66,7 +67,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                         <tr>
                             <th scope="col" className="px-6 py-3">No. Contrato</th>
                             <th scope="col" className="px-6 py-3">Comprador</th>
-                            <th scope="col" className="px-6 py-3">Fecha Contrato</th>
+                            <th scope="col" className="px-6 py-3">Fecha Venta</th>
                             <th scope="col" className="px-6 py-3">Tipo Café</th>
                             <th scope="col" className="px-6 py-3 text-right">Cantidad (qqo)</th>
                             <th scope="col" className="px-6 py-3 text-right">Diferencial</th>
@@ -81,10 +82,10 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                             </tr>
                         ) : contracts.length > 0 ? (
                             contracts.map((contract) => (
-                                <tr key={contract.id} className="border-b border-border hover:bg-muted/50">
+                                <tr key={contract.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => onViewDetails(contract)}>
                                     <td className="px-6 py-4 font-medium text-foreground">{contract.contractNumber}</td>
                                     <td className="px-6 py-4 text-foreground">{contract.buyerName}</td>
-                                    <td className="px-6 py-4">{contract.contractDate}</td>
+                                    <td className="px-6 py-4">{contract.saleDate}</td>
                                     <td className="px-6 py-4">{contract.coffeeType}</td>
                                     <td className="px-6 py-4 text-right">{contract.quantity.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right">${contract.differential.toFixed(2)}</td>
@@ -95,10 +96,10 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
-                                            <button className="text-yellow-500 hover:text-yellow-700">
+                                            <button className="text-yellow-500 hover:text-yellow-700" onClick={(e) => e.stopPropagation()}>
                                                 <PencilIcon className="w-4 h-4" />
                                             </button>
-                                            <button className="text-red-500 hover:text-red-700">
+                                            <button className="text-red-500 hover:text-red-700" onClick={(e) => e.stopPropagation()}>
                                                 <TrashIcon className="w-4 h-4" />
                                             </button>
                                         </div>

@@ -16,13 +16,18 @@ import ContractsPage from './ContractsPage';
 import AdminPage from './AdminPage';
 import CreateContractPage from './CreateContractPage';
 import EntitiesPage from './EntitiesPage';
+import DashboardPage from './DashboardPage';
+import ContractDetailPage from './ContractDetailPage';
+import { Contract } from '../types';
 
-type Page = 'dashboard' | 'contracts' | 'entities' | 'admin' | 'create-contract';
+type Page = 'dashboard' | 'contracts' | 'entities' | 'admin' | 'create-contract' | 'contract-detail';
 
 const DashboardLayout: React.FC = () => {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [activePage, setActivePage] = useState<Page>('contracts');
+  const [activePage, setActivePage] = useState<Page>('dashboard');
+  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+
 
   const handleSignOut = async () => {
     try {
@@ -30,6 +35,11 @@ const DashboardLayout: React.FC = () => {
     } catch (error) {
       console.error("Error signing out: ", error);
     }
+  };
+  
+  const handleViewContractDetails = (contract: Contract) => {
+    setSelectedContract(contract);
+    setActivePage('contract-detail');
   };
 
   const NavLink: React.FC<{ page: Page; label: string; icon: ReactNode }> = ({ page, label, icon }) => (
@@ -48,16 +58,20 @@ const DashboardLayout: React.FC = () => {
 
   const renderPage = (): ReactNode => {
     switch (activePage) {
+      case 'dashboard':
+        return <DashboardPage />;
       case 'contracts':
-        return <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} />;
+        return <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} onViewDetails={handleViewContractDetails} />;
       case 'entities':
         return <EntitiesPage />;
       case 'admin':
         return <AdminPage />;
       case 'create-contract':
         return <CreateContractPage onCancel={() => setActivePage('contracts')} onSaveSuccess={() => setActivePage('contracts')} />;
+      case 'contract-detail':
+        return selectedContract ? <ContractDetailPage contract={selectedContract} onBack={() => setActivePage('contracts')} /> : <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} onViewDetails={handleViewContractDetails}/>;
       default:
-        return <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} />;
+        return <DashboardPage />;
     }
   };
 
@@ -69,7 +83,7 @@ const DashboardLayout: React.FC = () => {
           <h1 className="text-lg font-bold text-green-600">BeanTrace</h1>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          <NavLink page="dashboard" label="Panel de Control" icon={<HomeIcon className="w-5 h-5" />} />
+          <NavLink page="dashboard" label="Dashboard" icon={<HomeIcon className="w-5 h-5" />} />
           <NavLink page="contracts" label="Contratos" icon={<FileTextIcon className="w-5 h-5" />} />
           <NavLink page="entities" label="Entidades" icon={<BriefcaseIcon className="w-5 h-5" />} />
           <NavLink page="admin" label="Administración" icon={<SettingsIcon className="w-5 h-5" />} />

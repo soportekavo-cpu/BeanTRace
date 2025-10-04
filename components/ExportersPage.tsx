@@ -50,28 +50,32 @@ const ExportersPage: React.FC = () => {
     
     return (
         <div>
-            <form onSubmit={handleAddExporter} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 pb-6 border-b">
-                <input
-                    type="text"
-                    value={newExporterName}
-                    onChange={(e) => setNewExporterName(e.target.value)}
-                    placeholder="Nombre de la exportadora"
-                    className="md:col-span-1 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm"
-                />
-                <input
-                    type="text"
-                    value={newLicenseNumber}
-                    onChange={(e) => setNewLicenseNumber(e.target.value)}
-                    placeholder="No. de Licencia"
-                    className="md:col-span-1 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm"
-                />
-                <button 
-                    type="submit"
-                    disabled={isAdding || !newExporterName.trim() || !newLicenseNumber.trim()}
-                    className="md:col-span-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-400">
-                    <PlusIcon className="w-4 h-4" />
-                    {isAdding ? 'Agregando...' : 'Agregar Exportadora'}
-                </button>
+            <form onSubmit={handleAddExporter} className="space-y-4 mb-6 pb-6 border-b border-border">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <input
+                        type="text"
+                        value={newExporterName}
+                        onChange={(e) => setNewExporterName(e.target.value)}
+                        placeholder="Nombre de la exportadora"
+                        className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm"
+                    />
+                    <input
+                        type="text"
+                        value={newLicenseNumber}
+                        onChange={(e) => setNewLicenseNumber(e.target.value)}
+                        placeholder="No. de Licencia"
+                        className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm"
+                    />
+                     <div className="flex justify-end md:col-span-1">
+                        <button 
+                            type="submit"
+                            disabled={isAdding || !newExporterName.trim() || !newLicenseNumber.trim()}
+                            className="flex items-center justify-center gap-2 w-full md:w-auto px-4 py-2 text-sm font-medium text-white bg-green-700 rounded-md hover:bg-green-800 disabled:bg-green-500 disabled:cursor-not-allowed">
+                            <PlusIcon className="w-4 h-4" />
+                            {isAdding ? 'Agregando...' : 'Agregar'}
+                        </button>
+                    </div>
+                </div>
             </form>
 
             <div className="overflow-x-auto">

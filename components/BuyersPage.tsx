@@ -57,20 +57,25 @@ const BuyersPage: React.FC = () => {
     
     return (
         <div>
-             <form onSubmit={handleAddBuyer} className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6 pb-6 border-b">
-                <input type="text" name="name" value={newBuyer.name} onChange={handleInputChange} placeholder="Nombre Comprador" required className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                <input type="text" name="address" value={newBuyer.address} onChange={handleInputChange} placeholder="Dirección" className="md:col-span-4 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                <input type="text" name="contactPerson" value={newBuyer.contactPerson} onChange={handleInputChange} placeholder="Persona de Contacto" className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                <input type="text" name="phone" value={newBuyer.phone} onChange={handleInputChange} placeholder="Teléfono" className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                <input type="email" name="email" value={newBuyer.email} onChange={handleInputChange} placeholder="Email" className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                
-                <button 
-                    type="submit"
-                    disabled={isAdding || !newBuyer.name.trim()}
-                    className="md:col-span-6 w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-400">
-                    <PlusIcon className="w-4 h-4" />
-                    {isAdding ? 'Agregando...' : 'Agregar Comprador'}
-                </button>
+             <form onSubmit={handleAddBuyer} className="space-y-4 mb-6 pb-6 border-b border-border">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" name="name" value={newBuyer.name} onChange={handleInputChange} placeholder="Nombre Comprador" required className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                    <input type="text" name="contactPerson" value={newBuyer.contactPerson} onChange={handleInputChange} placeholder="Persona de Contacto" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                </div>
+                <input type="text" name="address" value={newBuyer.address} onChange={handleInputChange} placeholder="Dirección" className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" name="phone" value={newBuyer.phone} onChange={handleInputChange} placeholder="Teléfono" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                    <input type="email" name="email" value={newBuyer.email} onChange={handleInputChange} placeholder="Email" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                </div>
+                <div className="flex justify-end">
+                    <button 
+                        type="submit"
+                        disabled={isAdding || !newBuyer.name.trim()}
+                        className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-700 rounded-md hover:bg-green-800 disabled:bg-green-500 disabled:cursor-not-allowed">
+                        <PlusIcon className="w-4 h-4" />
+                        {isAdding ? 'Agregando...' : 'Agregar'}
+                    </button>
+                </div>
             </form>
 
             <div className="overflow-x-auto">

@@ -55,18 +55,21 @@ const ClientsPage: React.FC = () => {
     
     return (
         <div>
-             <form onSubmit={handleAddClient} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-6 border-b">
-                <input type="text" name="name" value={newClient.name} onChange={handleInputChange} placeholder="Nombre Cliente" required className="md:col-span-2 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                <input type="text" name="phone" value={newClient.phone} onChange={handleInputChange} placeholder="Teléfono" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                <input type="email" name="email" value={newClient.email} onChange={handleInputChange} placeholder="Email" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
-                
-                <button 
-                    type="submit"
-                    disabled={isAdding || !newClient.name.trim()}
-                    className="md:col-span-4 w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-400">
-                    <PlusIcon className="w-4 h-4" />
-                    {isAdding ? 'Agregando...' : 'Agregar Cliente'}
-                </button>
+             <form onSubmit={handleAddClient} className="space-y-4 mb-6 pb-6 border-b border-border">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input type="text" name="name" value={newClient.name} onChange={handleInputChange} placeholder="Nombre Cliente" required className="md:col-span-1 px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                    <input type="text" name="phone" value={newClient.phone} onChange={handleInputChange} placeholder="Teléfono" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                    <input type="email" name="email" value={newClient.email} onChange={handleInputChange} placeholder="Email" className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                </div>
+                <div className="flex justify-end">
+                    <button 
+                        type="submit"
+                        disabled={isAdding || !newClient.name.trim()}
+                        className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-700 rounded-md hover:bg-green-800 disabled:bg-green-500 disabled:cursor-not-allowed">
+                        <PlusIcon className="w-4 h-4" />
+                        {isAdding ? 'Agregando...' : 'Agregar'}
+                    </button>
+                </div>
             </form>
 
             <div className="overflow-x-auto">

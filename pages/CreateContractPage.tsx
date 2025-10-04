@@ -29,7 +29,6 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
   const [contractNumber, setContractNumber] = useState('');
   const [exporterId, setExporterId] = useState('');
   const [buyerId, setBuyerId] = useState('');
-  const [contractDate, setContractDate] = useState(new Date().toISOString().split('T')[0]);
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [coffeeType, setCoffeeType] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -92,7 +91,6 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         exporterName: selectedExporter.name,
         buyerId,
         buyerName: selectedBuyer.name,
-        contractDate,
         saleDate,
         coffeeType,
         quantity: parseFloat(quantity),
@@ -130,9 +128,8 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         {/* General Details */}
         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
           <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Información Principal</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <InputField label="Número de Contrato" id="contractNumber" value={contractNumber} onChange={(e) => setContractNumber(e.target.value)} />
-            <InputField label="Fecha del Contrato" id="contractDate" type="date" value={contractDate} onChange={(e) => setContractDate(e.target.value)} />
             <InputField label="Fecha de Venta" id="saleDate" type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
             
             <div>
@@ -164,9 +161,9 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8 mt-8 items-start">
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-2">Unidad de Precio</label>
-              <div className="flex gap-4 p-1 border border-input rounded-md bg-muted/50 w-min">
-                <button type="button" onClick={() => setPriceUnit('CTS/LB')} className={`px-3 py-1 text-sm rounded-md ${priceUnit === 'CTS/LB' ? 'bg-background shadow-sm' : ''}`}>CTS/LB</button>
-                <button type="button" onClick={() => setPriceUnit('46 Kg.')} className={`px-3 py-1 text-sm rounded-md ${priceUnit === '46 Kg.' ? 'bg-background shadow-sm' : ''}`}>46 Kg.</button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPriceUnit('CTS/LB')} className={`px-4 py-2 text-sm rounded-md w-24 text-center border-2 transition-colors ${priceUnit === 'CTS/LB' ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-card hover:bg-muted/50 border-border'}`}>CTS/LB</button>
+                <button type="button" onClick={() => setPriceUnit('46 Kg.')} className={`px-4 py-2 text-sm rounded-md w-24 text-center border-2 transition-colors ${priceUnit === '46 Kg.' ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-card hover:bg-muted/50 border-border'}`}>46 Kg.</button>
               </div>
             </div>
             <div className="md:col-start-2">

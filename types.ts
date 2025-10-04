@@ -1,4 +1,3 @@
-
 export interface User {
   uid: string;
   email: string | null;
@@ -47,7 +46,6 @@ export interface Client {
     email: string;
 }
 
-// FIX: Added the missing Seller interface.
 export interface Seller {
     id?: string;
     name: string;
@@ -67,10 +65,9 @@ export interface Contract {
     exporterName: string;
     buyerId: string;
     buyerName: string;
-    contractDate: string;
     saleDate: string;
     coffeeType: string;
-    quantity: number; // in qqo
+    quantity: number; 
     position: string;
     differential: number;
     priceUnit: 'CTS/LB' | '46 Kg.';
@@ -80,4 +77,25 @@ export interface Contract {
     status: ContractStatus;
     contractPdfUrl?: string;
     instructionsPdfUrl?: string;
+}
+
+export interface ContractLot {
+    id?: string;
+    contractId: string;
+    partida: string;
+    bultos: number;
+    pesoKg: number;
+    pesoQqs: number;
+    fijacion: number;
+    fechaFijacion: string;
+    precioFinal: number;
+    pdfFijacionUrl?: string;
+    guiaMuestra: string;
+    fechaEnvioMuestra: string;
+    muestraAprobada: boolean;
+    destino: string;
+    isf: boolean;
+    booking: string;
+    naviera: string;
+    valorCobro: number;
 }
