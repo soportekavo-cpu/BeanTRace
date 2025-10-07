@@ -1,3 +1,4 @@
+
 export interface User {
   uid: string;
   email: string | null;
@@ -51,13 +52,6 @@ export interface Seller {
     name: string;
 }
 
-export enum ContractStatus {
-    DRAFT = 'Borrador',
-    ACTIVE = 'Activo',
-    COMPLETED = 'Completado',
-    CANCELLED = 'Cancelado'
-}
-
 export interface Contract {
     id: string;
     contractNumber: string;
@@ -74,7 +68,6 @@ export interface Contract {
     shipmentMonth: string;
     isFinished: boolean;
     certifications: string[];
-    status: ContractStatus;
     contractPdfUrl?: string;
     instructionsPdfUrl?: string;
 }
@@ -84,6 +77,7 @@ export interface ContractLot {
     contractId: string;
     partida: string;
     bultos: number;
+    empaque: string;
     pesoKg: number;
     pesoQqs: number;
     fijacion: number;
@@ -98,4 +92,118 @@ export interface ContractLot {
     booking: string;
     naviera: string;
     valorCobro: number;
+    paymentStatus: 'unpaid' | 'in-progress' | 'paid';
+}
+
+export interface CuppingProfile {
+  score: number;
+  fragranceAroma: number;
+  flavor: number;
+  aftertaste: number;
+  acidity: number;
+  body: number;
+  balance: number;
+  uniformity: number;
+  cleanCup: number;
+  sweetness: number;
+  notes: string;
+  defects: string;
+  roastLevel: 'Ligero' | 'Medio' | 'Oscuro' | '';
+  cuppingDate: string;
+}
+
+export interface PurchaseReceipt {
+    id: string;
+    status: 'Activo' | 'Anulado';
+    // General Info
+    certificacion: string[];
+    fecha: string; 
+    recibo: string; 
+    proveedorId: string;
+    placaVehiculo: string;
+    piloto: string;
+    // Coffee Type
+    tipo: string;
+    customTipo?: string;
+    // Weight
+    pesoBruto: number;
+    yute: number;
+    nylon: number;
+    tara: number;
+    pesoNeto: number; 
+    pdfReciboUrl?: string;
+    pdfEnvioUrl?: string;
+    // Quality Analysis
+    precio: number;
+    gMuestra: number;
+    gPrimera: number;
+    gRechazo: number;
+    primera: number; 
+    rechazo: number; 
+    totalBruto: number;
+    precioCatadura: number;
+    // Yields
+    rendimientoTotal: number;
+    rendimientoPrimera: number;
+    rendimientoRechazo: number;
+    // Costs
+    totalCompra: number;
+    costoCatadura: number;
+    pesoBrutoEnvio: number;
+    diferencia: number;
+    // Storage
+    trillado: number;
+    enBodega: number;
+    reciboDevuelto: boolean;
+    notas: string;
+    // Cupping
+    cuppingProfile?: CuppingProfile;
+  }
+
+export interface ThreshingOrder {
+  id: string;
+  contractId: string;
+  orderNumber: string;
+  creationDate: string;
+  lotIds: string[];
+  notes: string;
+  totalToThresh: number;
+  totalPrimeras: number;
+  totalCatadura: number;
+}
+
+export interface ThreshingOrderReceipt {
+  id: string;
+  threshingOrderId: string;
+  receiptId: string;
+  supplierName: string;
+  coffeeType: string;
+  receiptNumber: string;
+  amountToThresh: number;
+  primeras: number;
+  catadura: number;
+}
+
+// FIX: Add missing Factura and Payment types
+export interface Factura {
+    id: string;
+    facturaNumber: string;
+    buyerId: string;
+    buyerName: string;
+    issueDate: string;
+    dueDate: string;
+    lotIds: string[];
+    totalAmount: number;
+    status: 'Draft' | 'Sent' | 'PartiallyPaid' | 'Paid' | 'Overdue';
+    notes: string;
+}
+
+export interface Payment {
+    id: string;
+    facturaId: string;
+    date: string;
+    amount: number;
+    method: 'Transferencia' | 'Cheque' | 'Efectivo' | 'Otro';
+    reference: string;
+    notes: string;
 }

@@ -1,21 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { addDoc, collection } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import React, { useState, useEffect, useRef } from 'react';
+import api from '../services/localStorageManager';
 import { Contract, ContractLot, Exporter } from '../types';
 
 interface AddContractLotFormProps {
     contract: Contract;
     exporter: Exporter;
     existingLots: ContractLot[];
+    onCancel: () => void;
+    onLotAdded: () => void;
 }
 
-const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, exporter, existingLots }) => {
-    const [lot, setLot] = useState<Omit<ContractLot, 'id' | 'contractId'>>({
+const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, exporter, existingLots, onCancel, onLotAdded }) => {
+    const initialLotState = {
         partida: '',
-        bultos: 0,
-        pesoKg: 0,
+        bultos: '',
+        empaque: 'Saco de Yute',
+        pesoKg: '',
         pesoQqs: 0,
-        fijacion: 0,
+        fijacion: '',
         fechaFijacion: new Date().toISOString().split('T')[0],
         precioFinal: 0,
         guiaMuestra: '',
@@ -24,35 +26,46 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
         destino: '',
         isf: false,
         booking: '',
-        naviera: 'Maersk',
+        naviera: '',
         valorCobro: 0,
-    });
+        paymentStatus: 'unpaid',
+    };
+
+    const [lot, setLot] = useState<any>(initialLotState);
+    const [customNaviera, setCustomNaviera] = useState('');
+    const [customEmpaque, setCustomEmpaque] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
+    const [pdfFijacionFile, setPdfFijacionFile] = useState<File | null>(null);
+    const pdfInputRef = useRef<HTMLInputElement>(null);
 
     const navierasPopulares = ["Maersk", "Hapag-Lloyd", "CMA-CGM", "Seaboard Marine", "ONE Line", "MSC", "Evergreen Line"];
-    const usDestinations = ["new york", "los angeles", "miami", "houston", "seattle", "oakland", "long beach"]; // Example list
-
-    // Auto-calculate fields whenever dependencies change
+    const empaqueOptions = ["Saco de Yute", "GrainPro", "Caja", "Big Bag", "Jumbo", "Otro"];
+    const showIsfSuggestion = lot.destino.toLowerCase().includes('usa') || lot.destino.toLowerCase().includes('ee.uu');
+    
     useEffect(() => {
-        const nextCorrelative = (existingLots.length > 0 ? Math.max(...existingLots.map(l => parseInt(l.partida.split('/')[2]) || 0)) : 0) + 1;
-        const partida = `11/${exporter.licenseNumber}/${nextCorrelative}`;
-
-        const pesoQqs = calculatePesoQqs(lot.bultos, lot.pesoKg, contract.priceUnit);
-        const precioFinal = lot.fijacion + contract.differential;
-        const valorCobro = calculateValorCobro(lot.bultos, lot.pesoKg, precioFinal, contract.priceUnit);
-        const isf = usDestinations.some(d => lot.destino.toLowerCase().includes(d));
-
-        setLot(prev => ({
-            ...prev,
-            partida,
-            pesoQqs,
-            precioFinal,
-            valorCobro,
-            isf,
-        }));
-    }, [lot.bultos, lot.pesoKg, lot.fijacion, contract.priceUnit, contract.differential, existingLots, exporter.licenseNumber, lot.destino]);
-
+        const setPartidaNumber = async () => {
+            const allLots = await api.getCollection<ContractLot>('contractLots');
+            let nextNum = 1;
+            if (allLots.length > 0) {
+                const usedCorrelatives = Array.from(new Set(allLots
+                    .map(l => parseInt(l.partida.split('/')[2], 10))
+                    .filter(n => !isNaN(n))))
+                    .sort((a, b) => a - b);
+                
+                for (const num of usedCorrelatives) {
+                    if (num === nextNum) {
+                        nextNum++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            const partida = `11/${exporter.licenseNumber}/${nextNum}`;
+            setLot((prev: any) => ({...prev, partida}));
+        };
+        setPartidaNumber();
+    }, [exporter.licenseNumber, existingLots]);
 
     const calculatePesoQqs = (bultos: number, pesoKg: number, priceUnit: 'CTS/LB' | '46 Kg.') => {
         if (bultos <= 0 || pesoKg <= 0) return 0;
@@ -72,31 +85,55 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
         return (totalKg / 46) * precioFinal;
     };
 
+    useEffect(() => {
+        const bultosNum = parseFloat(lot.bultos) || 0;
+        const pesoKgNum = parseFloat(lot.pesoKg) || 0;
+        const fijacionNum = parseFloat(lot.fijacion) || 0;
+        
+        const pesoQqs = calculatePesoQqs(bultosNum, pesoKgNum, contract.priceUnit);
+        const precioFinal = fijacionNum + contract.differential;
+        const valorCobro = calculateValorCobro(bultosNum, pesoKgNum, precioFinal, contract.priceUnit);
+
+        setLot((prev: any) => ({
+            ...prev,
+            pesoQqs,
+            precioFinal,
+            valorCobro,
+        }));
+    }, [lot.bultos, lot.pesoKg, lot.fijacion, contract.differential, contract.priceUnit]);
+
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         const isCheckbox = type === 'checkbox';
-        const isNumber = type === 'number';
+        const isBooleanSelect = ['muestraAprobada', 'isf'].includes(name);
 
-        setLot(prev => ({
+        setLot((prev: any) => ({
             ...prev,
-            [name]: isCheckbox ? (e.target as HTMLInputElement).checked : isNumber ? parseFloat(value) || 0 : value,
+            [name]: isCheckbox 
+                ? (e.target as HTMLInputElement).checked 
+                : isBooleanSelect ? value === 'true' : value,
         }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        if (lot.bultos <= 0 || lot.pesoKg <= 0) {
-            setError('El número de bultos y el peso deben ser mayores a cero.');
-            return;
-        }
         setIsSaving(true);
         try {
-            await addDoc(collection(db, 'contractLots'), {
+            const finalNaviera = lot.naviera === 'Otra' ? customNaviera : lot.naviera;
+            const finalEmpaque = lot.empaque === 'Otro' ? customEmpaque : lot.empaque;
+            
+            await api.addDocument('contractLots', {
                 ...lot,
+                bultos: parseFloat(lot.bultos) || 0,
+                pesoKg: parseFloat(lot.pesoKg) || 0,
+                fijacion: parseFloat(lot.fijacion) || 0,
+                naviera: finalNaviera,
+                empaque: finalEmpaque,
                 contractId: contract.id,
             });
-            // Reset form could happen here, but for now we keep it to allow quick edits
+            onLotAdded();
         } catch (err) {
             console.error(err);
             setError('No se pudo guardar la partida.');
@@ -106,38 +143,70 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
     };
 
     return (
-        <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Agregar Nueva Partida</h3>
+        <div className="pt-6 mt-4 border-t">
+            <h4 className="text-md font-semibold text-foreground mb-4">Nueva Partida</h4>
             <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div><label className="text-sm text-muted-foreground">Partida</label><p className="font-semibold text-foreground">{lot.partida || '...'}</p></div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div><label className="text-sm text-muted-foreground">Partida</label><p className="font-semibold text-green-600 dark:text-green-400 mt-1 p-2">{lot.partida || '...'}</p></div>
                     <div><label htmlFor="bultos" className="text-sm text-muted-foreground">No. Bultos</label><input type="number" id="bultos" name="bultos" value={lot.bultos} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                    <div className="space-y-1">
+                        <label htmlFor="empaque" className="text-sm text-muted-foreground">Empaque</label>
+                        <select id="empaque" name="empaque" value={lot.empaque} onChange={handleInputChange} className="w-full p-2 border rounded-md bg-background border-input">
+                            {empaqueOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        {lot.empaque === 'Otro' && (
+                             <input type="text" value={customEmpaque} onChange={(e) => setCustomEmpaque(e.target.value)} placeholder="Tipo de empaque" className="w-full mt-1 p-2 border rounded-md bg-background border-input"/>
+                        )}
+                    </div>
                     <div><label htmlFor="pesoKg" className="text-sm text-muted-foreground">Peso Kg.</label><input type="number" id="pesoKg" name="pesoKg" value={lot.pesoKg} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                    <div><label className="text-sm text-muted-foreground">Peso qqs.</label><p className="font-semibold text-foreground mt-1 p-2">{lot.pesoQqs.toFixed(4)}</p></div>
+                    <div><label className="text-sm text-muted-foreground">Peso qqs.</label><p className="font-semibold text-foreground mt-1 p-2">{lot.pesoQqs.toFixed(2)}</p></div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                     <div><label htmlFor="fijacion" className="text-sm text-muted-foreground">Fijación ($)</label><input type="number" id="fijacion" name="fijacion" value={lot.fijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                     <div><label htmlFor="fijacion" className="text-sm text-muted-foreground">Fijación ($)</label><input type="number" step="any" id="fijacion" name="fijacion" value={lot.fijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                      <div><label htmlFor="fechaFijacion" className="text-sm text-muted-foreground">Fecha Fijación</label><input type="date" id="fechaFijacion" name="fechaFijacion" value={lot.fechaFijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                      <div><label className="text-sm text-muted-foreground">Precio Final</label><p className="font-semibold text-foreground mt-1 p-2">${lot.precioFinal.toFixed(2)}</p></div>
-                     <div><label htmlFor="pdfFijacion" className="text-sm text-muted-foreground">PDF Fijación</label><input type="file" id="pdfFijacion" name="pdfFijacion" className="w-full text-sm mt-1"/></div>
+                     <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-1">PDF Fijación</label>
+                        <button type="button" onClick={() => pdfInputRef.current?.click()} className="w-full text-sm font-semibold text-green-700 bg-green-100 hover:bg-green-200/50 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-900 px-4 py-2 rounded-lg transition-colors">
+                            Seleccionar archivo
+                        </button>
+                        <input type="file" ref={pdfInputRef} onChange={e => setPdfFijacionFile(e.target.files?.[0] || null)} className="hidden" />
+                        {pdfFijacionFile && <p className="text-xs text-muted-foreground mt-1">{pdfFijacionFile.name}</p>}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6">
                     <div><label htmlFor="guiaMuestra" className="text-sm text-muted-foreground">Guía Muestra</label><input type="text" id="guiaMuestra" name="guiaMuestra" value={lot.guiaMuestra} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                     <div><label htmlFor="fechaEnvioMuestra" className="text-sm text-muted-foreground">Fecha Envío Muestra</label><input type="date" id="fechaEnvioMuestra" name="fechaEnvioMuestra" value={lot.fechaEnvioMuestra} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                    <div className="flex items-end"><label className="flex items-center gap-2"><input type="checkbox" name="muestraAprobada" checked={lot.muestraAprobada} onChange={handleInputChange}/> Muestra Aprobada</label></div>
+                    <div className="w-full"><label htmlFor="muestraAprobada" className="text-sm text-muted-foreground">Muestra Aprobada</label>
+                        <select name="muestraAprobada" id="muestraAprobada" value={String(lot.muestraAprobada)} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
+                            <option value="false">No</option>
+                            <option value="true">Sí</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div><label htmlFor="destino" className="text-sm text-muted-foreground">Destino</label><input type="text" id="destino" name="destino" value={lot.destino} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input" placeholder="Ej: New York, USA"/></div>
-                    <div><label className="text-sm text-muted-foreground">ISF</label><p className={`font-semibold p-2 mt-1 ${lot.isf ? 'text-green-600' : 'text-red-600'}`}>{lot.isf ? 'Sí (Auto)' : 'No (Auto)'}</p></div>
-                    <div><label htmlFor="booking" className="text-sm text-muted-foreground">Booking</label><input type="text" id="booking" name="booking" value={lot.booking} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                    <div><label htmlFor="naviera" className="text-sm text-muted-foreground">Naviera</label>
-                        <select id="naviera" name="naviera" value={lot.naviera} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
-                            {navierasPopulares.map(n => <option key={n} value={n}>{n}</option>)}
-                            <option value="Otra">Otra</option>
+                    <div><label htmlFor="isf" className="text-sm text-muted-foreground">ISF Requerido</label>
+                        <select name="isf" id="isf" value={String(lot.isf)} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
+                            <option value="false">No</option>
+                            <option value="true">Sí</option>
                         </select>
+                        {showIsfSuggestion && <p className="text-xs text-blue-500 mt-1">Destino parece ser EE.UU. ¿Se requiere ISF?</p>}
+                    </div>
+                    <div><label htmlFor="booking" className="text-sm text-muted-foreground">Booking</label><input type="text" id="booking" name="booking" value={lot.booking} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                    <div className="space-y-1">
+                        <label htmlFor="naviera" className="text-sm text-muted-foreground">Naviera</label>
+                        <select id="naviera" name="naviera" value={lot.naviera} onChange={handleInputChange} className="w-full p-2 border rounded-md bg-background border-input">
+                            <option value="">Selecciona una naviera</option>
+                            {navierasPopulares.map(n => <option key={n} value={n}>{n}</option>)}
+                            <option value="Otra">Otra (especificar)</option>
+                        </select>
+                        {lot.naviera === 'Otra' && (
+                            <input type="text" value={customNaviera} onChange={(e) => setCustomNaviera(e.target.value)} placeholder="Nombre de la naviera" className="w-full mt-1 p-2 border rounded-md bg-background border-input"/>
+                        )}
                     </div>
                 </div>
                 
@@ -146,9 +215,12 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
                      <div><label className="text-sm text-muted-foreground">Valor del Cobro ($)</label><p className="font-semibold text-2xl text-green-600 mt-1">${lot.valorCobro.toFixed(2)}</p></div>
                  </div>
 
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && <p className="text-sm text-center text-red-500">{error}</p>}
                 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-4">
+                    <button type="button" onClick={onCancel} className="px-6 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">
+                        Cancelar
+                    </button>
                     <button type="submit" disabled={isSaving} className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-400">
                         {isSaving ? 'Guardando...' : 'Agregar Partida'}
                     </button>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
-import { Contract, ContractStatus, Exporter, Buyer } from '../types';
+import api from '../services/localStorageManager';
+import { Contract, Exporter, Buyer } from '../types';
 import CheckIcon from '../components/icons/CheckIcon';
 
 interface CreateContractPageProps {
@@ -31,7 +30,6 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
   const [buyerId, setBuyerId] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [coffeeType, setCoffeeType] = useState('');
-  const [quantity, setQuantity] = useState('');
   const [position, setPosition] = useState('');
   const [differential, setDifferential] = useState('');
   const [priceUnit, setPriceUnit] = useState<'CTS/LB' | '46 Kg.'>('CTS/LB');
@@ -48,10 +46,12 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
   useEffect(() => {
     const fetchExportersAndBuyers = async () => {
       try {
-        const exportersSnapshot = await getDocs(collection(db, "exporters"));
-        setExporters(exportersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exporter)));
-        const buyersSnapshot = await getDocs(collection(db, "buyers"));
-        setBuyers(buyersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Buyer)));
+        const [exportersData, buyersData] = await Promise.all([
+          api.getCollection<Exporter>('exporters'),
+          api.getCollection<Buyer>('buyers')
+        ]);
+        setExporters(exportersData);
+        setBuyers(buyersData);
       } catch (err) {
         console.error("Failed to fetch exporters or buyers: ", err);
         setError("No se pudieron cargar las exportadoras o compradores.");
@@ -70,7 +70,7 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contractNumber || !exporterId || !buyerId || !quantity || !differential) {
+    if (!contractNumber || !exporterId || !buyerId || !differential) {
       setError('Por favor, completa todos los campos obligatorios.');
       return;
     }
@@ -85,7 +85,7 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         throw new Error("Exportadora o comprador no válido.");
       }
       
-      const newContract: Omit<Contract, 'id' | 'status'> = {
+      const newContract: Omit<Contract, 'id'> = {
         contractNumber,
         exporterId,
         exporterName: selectedExporter.name,
@@ -93,7 +93,7 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         buyerName: selectedBuyer.name,
         saleDate,
         coffeeType,
-        quantity: parseFloat(quantity),
+        quantity: 0, // Quantity will be calculated from lots
         position,
         differential: parseFloat(differential),
         priceUnit,
@@ -102,10 +102,7 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         certifications,
       };
 
-      await addDoc(collection(db, 'contracts'), {
-        ...newContract,
-        status: isFinished ? ContractStatus.COMPLETED : ContractStatus.DRAFT
-      });
+      await api.addDocument<Contract>('contracts', newContract);
       onSaveSuccess();
 
     } catch (err) {
@@ -152,9 +149,8 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         {/* Product Details */}
         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
           <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Detalles del Café y Precio</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <InputField label="Tipo de Café" id="coffeeType" value={coffeeType} onChange={(e) => setCoffeeType(e.target.value)} placeholder="Ej: SHB, Natural" />
-            <InputField label="Cantidad (qqo)" id="quantity" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0.00" />
             <InputField label="Posición (Mes Mercado)" id="position" value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Ej: Julio" />
             <InputField label="Diferencial ($)" id="differential" type="number" value={differential} onChange={(e) => setDifferential(e.target.value)} placeholder="Ej: 10, -15" />
           </div>

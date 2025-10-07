@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, doc, deleteDoc, setDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+// FIX: The `services/firebase.ts` file is deprecated. Replaced Firebase logic with `localStorageManager`.
+import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
 import { Buyer } from '../types';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
@@ -13,19 +13,29 @@ const BuyersPage: React.FC = () => {
     const [isAdding, setIsAdding] = useState(false);
 
     useEffect(() => {
-        setLoading(true);
-        const unsubscribe = onSnapshot(collection(db, "buyers"), 
-            (snapshot) => {
-                const buyersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Buyer));
+        // FIX: Replaced Firebase onSnapshot with localStorageManager data fetching and change listener.
+        const fetchBuyers = async () => {
+            setLoading(true);
+            try {
+                const buyersData = await api.getCollection<Buyer>("buyers");
                 setBuyers(buyersData);
-                setLoading(false);
-            },
-            (error) => {
+            } catch (error) {
                 console.error("Error fetching buyers: ", error);
+            } finally {
                 setLoading(false);
             }
-        );
-        return () => unsubscribe();
+        };
+
+        fetchBuyers();
+
+        const handleDataChange = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            if (customEvent.detail.collectionName === 'buyers') {
+                fetchBuyers();
+            }
+        };
+        addDataChangeListener(handleDataChange);
+        return () => removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleAddBuyer = async (e: React.FormEvent) => {
@@ -34,7 +44,15 @@ const BuyersPage: React.FC = () => {
         
         setIsAdding(true);
         try {
-            await addDoc(collection(db, "buyers"), { name: newBuyerName.trim() });
+            // FIX: Replaced Firebase addDoc with localStorageManager addDocument.
+            // Provided empty strings for other required fields to satisfy the Buyer type.
+            await api.addDocument<Buyer>("buyers", { 
+                name: newBuyerName.trim(),
+                address: '',
+                contactPerson: '',
+                phone: '',
+                email: '',
+            });
             setNewBuyerName('');
         } catch (error) {
             console.error("Error adding buyer: ", error);

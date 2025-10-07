@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import api from '../services/localStorageManager';
 import { AppUser, AppRole } from '../types';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
@@ -55,8 +54,7 @@ const UserManagement: React.FC = () => {
         const fetchUsers = async () => {
             setLoading(true);
             try {
-                const querySnapshot = await getDocs(collection(db, "users"));
-                const usersData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
+                const usersData = await api.getCollection<AppUser>("users");
                 setUsers(usersData);
             } catch (error) {
                 console.error("Error fetching users: ", error);
@@ -113,35 +111,20 @@ const RoleManagement: React.FC = () => {
     const [roles, setRoles] = useState<AppRole[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchRoles = async () => {
-        setLoading(true);
-        try {
-            const querySnapshot = await getDocs(collection(db, "roles"));
-             if (querySnapshot.empty) {
-                // Create default roles if none exist
-                const defaultRoles = [
-                    { name: 'Admin', isDefault: true },
-                    { name: 'Manager', isDefault: false },
-                    { name: 'User', isDefault: false },
-                ];
-                for (const role of defaultRoles) {
-                    await addDoc(collection(db, "roles"), role);
-                }
-                // Re-fetch after creating them
-                fetchRoles(); 
-                return;
-            }
-            const rolesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppRole));
-            setRoles(rolesData);
-        } catch (error) {
-            console.error("Error fetching roles: ", error);
-        }
-        setLoading(false);
-    };
-
     useEffect(() => {
+        const fetchRoles = async () => {
+            setLoading(true);
+            try {
+                const rolesData = await api.getCollection<AppRole>("roles");
+                setRoles(rolesData);
+            } catch (error) {
+                console.error("Error fetching roles: ", error);
+            }
+            setLoading(false);
+        };
         fetchRoles();
     }, []);
+
 
     return (
     <div>

@@ -1,9 +1,6 @@
 import React, { useState, ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-// FIX: Changed import from 'firebase/auth' to '@firebase/auth' to resolve module export errors.
-import { signOut } from '@firebase/auth';
-import { auth } from '../services/firebase';
 
 import SunIcon from '../components/icons/SunIcon';
 import MoonIcon from '../components/icons/MoonIcon';
@@ -11,35 +8,24 @@ import HomeIcon from '../components/icons/HomeIcon';
 import FileTextIcon from '../components/icons/FileTextIcon';
 import BriefcaseIcon from '../components/icons/BriefcaseIcon';
 import SettingsIcon from '../components/icons/SettingsIcon';
+import ClipboardListIcon from '../components/icons/ClipboardListIcon';
 
 import ContractsPage from './ContractsPage';
 import AdminPage from './AdminPage';
 import CreateContractPage from './CreateContractPage';
 import EntitiesPage from './EntitiesPage';
 import DashboardPage from './DashboardPage';
-import ContractDetailPage from './ContractDetailPage';
-import { Contract } from '../types';
+import IngresoPage from './IngresoPage';
 
-type Page = 'dashboard' | 'contracts' | 'entities' | 'admin' | 'create-contract' | 'contract-detail';
+type Page = 'dashboard' | 'contracts' | 'entities' | 'ingreso' | 'admin' | 'create-contract';
 
 const DashboardLayout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [activePage, setActivePage] = useState<Page>('dashboard');
-  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
 
-
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Error signing out: ", error);
-    }
-  };
-  
-  const handleViewContractDetails = (contract: Contract) => {
-    setSelectedContract(contract);
-    setActivePage('contract-detail');
+  const handleSignOut = () => {
+    logout();
   };
 
   const NavLink: React.FC<{ page: Page; label: string; icon: ReactNode }> = ({ page, label, icon }) => (
@@ -61,15 +47,15 @@ const DashboardLayout: React.FC = () => {
       case 'dashboard':
         return <DashboardPage />;
       case 'contracts':
-        return <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} onViewDetails={handleViewContractDetails} />;
+        return <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} />;
       case 'entities':
         return <EntitiesPage />;
+      case 'ingreso':
+        return <IngresoPage />;
       case 'admin':
         return <AdminPage />;
       case 'create-contract':
         return <CreateContractPage onCancel={() => setActivePage('contracts')} onSaveSuccess={() => setActivePage('contracts')} />;
-      case 'contract-detail':
-        return selectedContract ? <ContractDetailPage contract={selectedContract} onBack={() => setActivePage('contracts')} /> : <ContractsPage onCreateContractClick={() => setActivePage('create-contract')} onViewDetails={handleViewContractDetails}/>;
       default:
         return <DashboardPage />;
     }
@@ -85,6 +71,7 @@ const DashboardLayout: React.FC = () => {
         <nav className="flex-1 p-4 space-y-2">
           <NavLink page="dashboard" label="Dashboard" icon={<HomeIcon className="w-5 h-5" />} />
           <NavLink page="contracts" label="Contratos" icon={<FileTextIcon className="w-5 h-5" />} />
+          <NavLink page="ingreso" label="Ingreso" icon={<ClipboardListIcon className="w-5 h-5" />} />
           <NavLink page="entities" label="Entidades" icon={<BriefcaseIcon className="w-5 h-5" />} />
           <NavLink page="admin" label="Administración" icon={<SettingsIcon className="w-5 h-5" />} />
         </nav>

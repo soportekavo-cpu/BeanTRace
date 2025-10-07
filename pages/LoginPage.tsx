@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-// FIX: Changed import from 'firebase/auth' to '@firebase/auth' to resolve module export errors.
-import { signInWithEmailAndPassword } from '@firebase/auth';
-import { auth } from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admin@beantrace.com');
+  const [password, setPassword] = useState('password');
   const [error, setError] = useState<string | null>(null);
+  const { login } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await login(email, password);
     } catch (err: any) {
       setError(err.message);
     }
@@ -25,6 +24,9 @@ const LoginPage: React.FC = () => {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground">
             Inicia sesión en tu cuenta
           </h2>
+          <p className="mt-2 text-center text-sm text-muted-foreground">
+            Usa admin@beantrace.com / password
+          </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           <div className="rounded-md shadow-sm -space-y-px">

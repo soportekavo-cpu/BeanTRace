@@ -102,21 +102,36 @@
         background-color: hsl(var(--background));
         color: hsl(var(--foreground));
       }
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #print-area, #print-area * {
+          visibility: visible;
+        }
+        #print-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+        }
+      }
     </style>
   <script type="importmap">
 {
   "imports": {
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-dom/server": "https://aistudiocdn.com/react-dom@^19.2.0/server",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.3.0/",
-    "@firebase/auth": "https://aistudiocdn.com/@firebase/auth@^1.11.0"
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
+    <div id="print-area" style="display: none;"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
