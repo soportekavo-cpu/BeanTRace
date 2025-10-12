@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Contract, ContractLot } from '../types';
+import ToggleSwitch from './ToggleSwitch';
 
 interface EditContractLotFormProps {
     lot: ContractLot;
@@ -136,26 +137,28 @@ const EditContractLotForm: React.FC<EditContractLotFormProps> = ({ lot, contract
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6 items-center">
                         <div><label htmlFor="guiaMuestra" className="text-sm text-muted-foreground">Guía Muestra</label><input type="text" id="guiaMuestra" name="guiaMuestra" value={formData.guiaMuestra} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                         <div><label htmlFor="fechaEnvioMuestra" className="text-sm text-muted-foreground">Fecha Envío Muestra</label><input type="date" id="fechaEnvioMuestra" name="fechaEnvioMuestra" value={formData.fechaEnvioMuestra} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                        <div className="w-full"><label htmlFor="muestraAprobada" className="text-sm text-muted-foreground">Muestra Aprobada</label>
-                            <select name="muestraAprobada" id="muestraAprobada" value={String(formData.muestraAprobada)} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
-                                <option value="false">No</option>
-                                <option value="true">Sí</option>
-                            </select>
+                        <div>
+                            <label className="text-sm text-muted-foreground mb-2 block">Muestra Aprobada</label>
+                            <ToggleSwitch id="muestraAprobadaEdit" checked={formData.muestraAprobada} onChange={(checked) => setFormData((prev: any) => ({ ...prev, muestraAprobada: checked }))} />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div><label htmlFor="destino" className="text-sm text-muted-foreground">Destino</label><input type="text" id="destino" name="destino" value={formData.destino} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                        <div><label htmlFor="isf" className="text-sm text-muted-foreground">ISF Requerido</label>
-                            <select name="isf" id="isf" value={String(formData.isf)} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
-                                <option value="false">No</option>
-                                <option value="true">Sí</option>
-                            </select>
-                            {showIsfSuggestion && <p className="text-xs text-blue-500 mt-1">Destino parece ser EE.UU. ¿Se requiere ISF?</p>}
+                        <div>
+                            <label className="text-sm text-muted-foreground mb-2 block">ISF Requerido</label>
+                            <ToggleSwitch id="isfEdit" checked={formData.isf} onChange={(checked) => setFormData((prev: any) => ({ ...prev, isf: checked, isfSent: checked ? prev.isfSent : false }))} />
+                            {showIsfSuggestion && !formData.isf && <p className="text-xs text-blue-500 mt-1">Destino parece ser EE.UU. ¿Se requiere ISF?</p>}
                         </div>
+                        {formData.isf && (
+                            <div>
+                                <label className="text-sm text-muted-foreground mb-2 block">ISF Enviado</label>
+                                <ToggleSwitch id="isfSentEdit" checked={!!formData.isfSent} onChange={(checked) => setFormData((prev: any) => ({ ...prev, isfSent: checked }))} />
+                            </div>
+                        )}
                         <div><label htmlFor="booking" className="text-sm text-muted-foreground">Booking</label><input type="text" id="booking" name="booking" value={formData.booking} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                         <div className="space-y-1">
                             <label htmlFor="naviera" className="text-sm text-muted-foreground">Naviera</label>

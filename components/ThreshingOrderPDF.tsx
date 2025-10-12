@@ -1,22 +1,33 @@
 import React from 'react';
-import { ThreshingOrder, ThreshingOrderReceipt, Contract, ContractLot } from '../types';
+import { ThreshingOrder, ThreshingOrderReceipt, Contract, ContractLot, Client } from '../types';
 
 interface ThreshingOrderPDFProps {
     order: ThreshingOrder;
     receipts: ThreshingOrderReceipt[];
-    contract: Contract;
-    lots: ContractLot[];
+    contract?: Contract | null;
+    lots?: ContractLot[] | null;
+    clientName?: string | null;
 }
 
-const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, contract, lots }) => {
+const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, contract, lots, clientName }) => {
     const formatDate = (dateString: string) => {
         if (!dateString || !dateString.includes('-')) return '';
         const [year, month, day] = dateString.split('-');
         return `${day}/${month}/${year}`;
     };
 
-    const getLotPartida = (lotId: string) => lots.find(l => l.id === lotId)?.partida || 'Desconocida';
-    const partidasAsociadas = order.lotIds.map(getLotPartida).join(', ');
+    const isLocalSale = order.orderType === 'Venta Local';
+
+    const getLotPartida = (lotId: string) => lots?.find(l => l.id === lotId)?.partida || 'Desconocida';
+    const partidasAsociadas = !isLocalSale && lots ? order.lotIds.map(getLotPartida).join(', ') : 'N/A';
+
+    const neededPrimerasExport = !isLocalSale && lots ? order.lotIds.reduce((sum, lotId) => {
+        const lot = lots.find(l => l.id === lotId);
+        return sum + (lot?.pesoQqs ?? 0);
+    }, 0) : 0;
+
+    const neededPrimeras = isLocalSale ? (order.pesoVendido || 0) : neededPrimerasExport;
+    const difference = order.totalPrimeras - neededPrimeras;
 
     return (
         <div style={{ fontFamily: 'Arial, sans-serif', color: '#333', padding: '40px', backgroundColor: '#fff', width: '210mm', minHeight: '297mm', boxSizing: 'border-box' }}>
@@ -27,14 +38,41 @@ const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, 
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '14px' }}>
                     <p style={{ margin: 0 }}><strong>Fecha:</strong> {formatDate(order.creationDate)}</p>
-                    <p style={{ margin: '5px 0 0 0' }}><strong>Contrato:</strong> {contract.contractNumber}</p>
+                    <p style={{ margin: '5px 0 0 0' }}><strong>Tipo:</strong> {order.orderType}</p>
                 </div>
             </header>
 
             <section style={{ marginTop: '30px', fontSize: '14px' }}>
                 <h2 style={{ borderBottom: '1px solid #ccc', paddingBottom: '8px', marginBottom: '15px', fontSize: '18px' }}>Información de la Orden</h2>
-                <p><strong>Partidas del Contrato a Completar:</strong> {partidasAsociadas}</p>
-                <p><strong>Comprador:</strong> {contract.buyerName}</p>
+                {isLocalSale ? (
+                    <>
+                        <p><strong>Cliente:</strong> {clientName || order.clientName || 'N/A'}</p>
+                        <p><strong>Lote:</strong> {order.lote || 'N/A'}</p>
+                        <p><strong>Tipo de Preparación:</strong> {order.tipoPreparacion || 'N/A'}</p>
+                        <p><strong>Descripción:</strong> {order.description || 'N/A'}</p>
+                    </>
+                ) : (
+                    <>
+                        <p><strong>Contrato:</strong> {contract?.contractNumber}</p>
+                        <p><strong>Partidas del Contrato a Completar:</strong> {partidasAsociadas}</p>
+                        <p><strong>Comprador:</strong> {contract?.buyerName}</p>
+                    </>
+                )}
+            </section>
+            
+            <section style={{ marginTop: '20px', fontSize: '14px', border: '2px solid #059669', borderRadius: '5px', padding: '15px', display: 'flex', justifyContent: 'space-around', backgroundColor: '#f0fdf4' }}>
+                <div style={{textAlign: 'center'}}>
+                    <p style={{margin: '0 0 5px 0', color: '#666', fontSize: '12px', textTransform: 'uppercase'}}>Necesario (Primeras)</p>
+                    <p style={{margin: 0, fontWeight: 'bold', fontSize: '18px'}}>{neededPrimeras.toFixed(2)}</p>
+                </div>
+                <div style={{textAlign: 'center'}}>
+                    <p style={{margin: '0 0 5px 0', color: '#666', fontSize: '12px', textTransform: 'uppercase'}}>Producido (Primeras)</p>
+                    <p style={{margin: 0, fontWeight: 'bold', fontSize: '18px'}}>{order.totalPrimeras.toFixed(2)}</p>
+                </div>
+                <div style={{textAlign: 'center'}}>
+                    <p style={{margin: '0 0 5px 0', color: '#666', fontSize: '12px', textTransform: 'uppercase'}}>Diferencia</p>
+                    <p style={{margin: 0, fontWeight: 'bold', fontSize: '22px', color: difference < -0.005 ? '#ef4444' : '#22c55e'}}>{difference.toFixed(2)}</p>
+                </div>
             </section>
             
             <section style={{ marginTop: '30px', fontSize: '14px' }}>

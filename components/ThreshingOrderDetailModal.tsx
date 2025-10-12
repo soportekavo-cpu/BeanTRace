@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { ThreshingOrder, ThreshingOrderReceipt, ContractLot } from '../types';
+import { ThreshingOrder, ThreshingOrderReceipt, ContractLot, Contract } from '../types';
+import PrinterIcon from './icons/PrinterIcon';
 
 interface ThreshingOrderDetailModalProps {
     order: ThreshingOrder;
     lots: ContractLot[];
+    contract: Contract;
+    onPrint: (order: ThreshingOrder) => void;
     onClose: () => void;
 }
 
@@ -14,7 +17,7 @@ const formatDate = (dateString: string) => {
     return `${day}/${month}/${year}`;
 };
 
-const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ order, lots, onClose }) => {
+const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ order, lots, contract, onPrint, onClose }) => {
     const [receipts, setReceipts] = useState<ThreshingOrderReceipt[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -33,6 +36,15 @@ const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ o
         fetchReceipts();
     }, [order.id]);
 
+    const calculations = useMemo(() => {
+        const neededPrimeras = order.lotIds.reduce((sum, lotId) => {
+            const lot = lots.find(l => l.id === lotId);
+            return sum + (lot?.pesoQqs ?? 0);
+        }, 0);
+        const difference = neededPrimeras - order.totalPrimeras;
+        return { neededPrimeras, difference };
+    }, [order.lotIds, order.totalPrimeras, lots]);
+
     const getLotPartida = (lotId: string) => lots.find(l => l.id === lotId)?.partida || 'Desconocida';
 
     return (
@@ -49,6 +61,37 @@ const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ o
                         <div><p className="text-muted-foreground">Fecha de Creación</p><p className="font-medium text-foreground">{formatDate(order.creationDate)}</p></div>
                         <div><p className="text-muted-foreground">Partidas Asociadas</p><p className="font-medium text-foreground">{order.lotIds.map(getLotPartida).join(', ')}</p></div>
                     </div>
+
+                    {/* Summary Box */}
+                    <div className="bg-card border-2 border-green-500/50 rounded-lg shadow-sm my-6 p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="font-semibold">
+                            <p className="text-muted-foreground text-sm">Necesario (Primeras)</p>
+                            <p className="text-2xl text-foreground">{calculations.neededPrimeras.toFixed(2)}</p>
+                        </div>
+                        <div className="font-semibold">
+                            <p className="text-muted-foreground text-sm">Producido (Primeras)</p>
+                            <p className="text-2xl text-foreground">{order.totalPrimeras.toFixed(2)}</p>
+                        </div>
+                        <div className="font-semibold">
+                            <p className="text-muted-foreground text-sm">Diferencia</p>
+                            <p className={`text-3xl ${calculations.difference > 0.005 ? 'text-red-500' : 'text-green-600'}`}>{calculations.difference.toFixed(2)}</p>
+                        </div>
+                        <div className="pt-4 border-t col-span-full grid grid-cols-3 gap-6">
+                            <div>
+                                <p className="text-muted-foreground text-sm">Total A Trillar</p>
+                                <p className="text-xl font-bold">{order.totalToThresh.toFixed(2)}</p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground text-sm">Total Primeras</p>
+                                <p className="text-xl font-bold">{order.totalPrimeras.toFixed(2)}</p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground text-sm">Total Catadura</p>
+                                <p className="text-xl font-bold">{order.totalCatadura.toFixed(2)}</p>
+                            </div>
+                        </div>
+                    </div>
+
 
                     {/* Receipts Table */}
                     <h4 className="text-lg font-semibold text-foreground mt-6 mb-3">Recibos Utilizados</h4>
@@ -91,6 +134,9 @@ const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ o
                 </div>
 
                 <div className="flex-shrink-0 flex justify-end gap-4 mt-6 pt-4 border-t">
+                    <button type="button" onClick={() => onPrint(order)} className="px-6 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted flex items-center gap-2">
+                        <PrinterIcon className="w-4 h-4"/> Imprimir
+                    </button>
                     <button onClick={onClose} className="px-6 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">Cerrar</button>
                 </div>
             </div>

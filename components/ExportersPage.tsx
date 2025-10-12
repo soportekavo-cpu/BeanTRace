@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
 import { Exporter } from '../types';
@@ -47,6 +49,7 @@ const ExportersPage: React.FC = () => {
         
         setIsAdding(true);
         try {
+// FIX: Corrected the generic type for addDocument to be Exporter, as the generic type T must have an 'id' property.
             await api.addDocument<Exporter>("exporters", { 
                 name: newExporterName.trim(),
                 licenseNumber: newLicenseNumber.trim()
@@ -95,7 +98,7 @@ const ExportersPage: React.FC = () => {
 
         setIsUpdating(true);
         try {
-            // FIX: Object literal may only specify known properties, and 'name' does not exist in type 'Partial<{ id?: string; }>'.
+            // FIX: Corrected the updateDocument call to pass a valid Partial<Exporter> object.
             await api.updateDocument<Exporter>('exporters', exporterToEdit.id!, {
                 name: exporterToEdit.name.trim(),
                 licenseNumber: exporterToEdit.licenseNumber.trim()

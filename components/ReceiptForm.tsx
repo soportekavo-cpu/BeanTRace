@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { PurchaseReceipt, Supplier, CuppingProfile } from '../types';
+import { PurchaseReceipt, Supplier, CuppingProfile, CoffeeType } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import CheckIcon from './icons/CheckIcon';
+import { printComponent } from '../utils/printUtils';
+import ReceiptPDF from './ReceiptPDF';
+import ToggleSwitch from './ToggleSwitch';
 
 interface ReceiptFormProps {
     existingReceipt?: PurchaseReceipt | null;
@@ -13,34 +17,38 @@ interface ReceiptFormProps {
 }
 
 const allCertifications = ['Rainforest', 'Orgánico', 'Fairtrade', 'EUDR'];
-const coffeeTypes = ['Pergamino', 'Cereza', 'Oro Lavado', 'Oro Natural', 'Natas', 'Otro'];
 const roastLevels: CuppingProfile['roastLevel'][] = ['', 'Ligero', 'Medio', 'Oscuro'];
 
-const FormSection: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
+const FormSection: React.FC<{ title: string; colorClass: string; children: React.ReactNode }> = ({ title, colorClass, children }) => (
     <div className="pt-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4 border-b border-border pb-3">{title}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-4">
+        <h3 className={`text-lg font-semibold ${colorClass} mb-4 border-b border-border pb-3`}>{title}</h3>
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-x-6 gap-y-4">
             {children}
         </div>
     </div>
 );
 
-const TextInput: React.FC<{ name: string; label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; parent?: string }> = ({ name, label, value, onChange, placeholder, parent }) => (
-    <div>
+
+const TextInput: React.FC<{ name: string; label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void; placeholder?: string; parent?: string; isTextArea?: boolean; className?: string }> = ({ name, label, value, onChange, placeholder, parent, isTextArea, className = '' }) => (
+    <div className={className}>
         <label htmlFor={name} className="block text-sm font-medium text-muted-foreground">{label}</label>
-        <input type="text" id={name} name={name} value={value} onChange={onChange} placeholder={placeholder} data-parent={parent} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border focus:ring-green-500 focus:border-green-500" />
+        {isTextArea ? (
+             <textarea id={name} name={name} value={value} onChange={onChange} placeholder={placeholder} data-parent={parent} rows={3} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border focus:ring-green-500 focus:border-green-500" />
+        ) : (
+            <input type="text" id={name} name={name} value={value} onChange={onChange} placeholder={placeholder} data-parent={parent} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border focus:ring-green-500 focus:border-green-500" />
+        )}
     </div>
 );
 
-const NumberInput: React.FC<{ name: string; label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; step?: string; placeholder?: string; disabled?: boolean; parent?: string; min?: string; max?: string; }> = ({ name, label, value, onChange, step = "any", placeholder, disabled = false, parent, min, max }) => (
-    <div>
+const NumberInput: React.FC<{ name: string; label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; step?: string; placeholder?: string; disabled?: boolean; parent?: string; min?: string; max?: string; className?: string; }> = ({ name, label, value, onChange, step = "any", placeholder, disabled = false, parent, min, max, className = '' }) => (
+    <div className={className}>
         <label htmlFor={name} className="block text-sm font-medium text-muted-foreground">{label}</label>
         <input type="number" id={name} name={name} value={value} onChange={onChange} step={step} placeholder={placeholder} disabled={disabled} data-parent={parent} min={min} max={max} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border focus:ring-green-500 focus:border-green-500 disabled:bg-muted disabled:cursor-not-allowed" />
     </div>
 );
 
-const CalculatedField: React.FC<{ label: string, value: number | string, isPercentage?: boolean, isCurrency?: boolean }> = ({ label, value, isPercentage, isCurrency }) => (
-    <div>
+const CalculatedField: React.FC<{ label: string, value: number | string, isPercentage?: boolean, isCurrency?: boolean, className?: string }> = ({ label, value, isPercentage, isCurrency, className = '' }) => (
+    <div className={className}>
         <label className="block text-sm font-medium text-muted-foreground">{label}</label>
         <div className="mt-1 w-full p-2 font-semibold text-foreground bg-muted/50 rounded-md min-h-[42px] flex items-center">
             {typeof value === 'number'
@@ -53,14 +61,21 @@ const CalculatedField: React.FC<{ label: string, value: number | string, isPerce
 
 
 const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, onCancel, onSaveSuccess }) => {
-    const { user } = useAuth();
+    const { user, roleDetails } = useAuth();
     const isEditMode = !!existingReceipt;
+    const canViewCosts = roleDetails?.permissions.ingreso?.viewCosts === true;
+    const canViewAnalysis = roleDetails?.permissions.ingreso?.viewAnalysis === true;
+    const [coffeeTypes, setCoffeeTypes] = useState<CoffeeType[]>([]);
 
     const getInitialState = () => {
-        const cuppingInitial = {
-            score: '', fragranceAroma: '', flavor: '', aftertaste: '', acidity: '', body: '',
-            balance: '', uniformity: '', cleanCup: '', sweetness: '', notes: '', defects: '',
-            roastLevel: '', cuppingDate: new Date().toISOString().split('T')[0],
+         const cuppingInitial = {
+            humedad: '',
+            dictamen: '',
+            diferencial: '',
+            mezcla: '',
+            roastLevel: '',
+            cuppingDate: new Date().toISOString().split('T')[0],
+            notes: '',
         };
 
         return {
@@ -70,7 +85,7 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
             proveedorId: existingReceipt?.proveedorId || '',
             placaVehiculo: existingReceipt?.placaVehiculo || '',
             piloto: existingReceipt?.piloto || '',
-            tipo: existingReceipt?.tipo || 'Pergamino',
+            tipo: existingReceipt?.tipo || '',
             customTipo: existingReceipt?.customTipo || '',
             pesoBruto: existingReceipt?.pesoBruto?.toString() || '',
             yute: existingReceipt?.yute?.toString() || '',
@@ -82,8 +97,6 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
             gRechazo: existingReceipt?.gRechazo?.toString() || '',
             precioCatadura: existingReceipt?.precioCatadura?.toString() || '',
             pesoBrutoEnvio: existingReceipt?.pesoBrutoEnvio?.toString() || '',
-            trillado: existingReceipt?.trillado?.toString() || '',
-            enBodega: existingReceipt?.enBodega?.toString() || '',
             reciboDevuelto: existingReceipt?.reciboDevuelto || false,
             notas: existingReceipt?.notas || '',
             cuppingProfile: {
@@ -106,11 +119,24 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
         const setReciboNumber = async () => {
             if (!isEditMode) {
                 const allReceipts = await api.getCollection<PurchaseReceipt>('purchaseReceipts');
-                const nextId = allReceipts.length > 0 ? Math.max(0, ...allReceipts.map(r => parseInt(r.recibo, 10))) + 1 : 1;
-                setFormData((prev: any) => ({ ...prev, recibo: nextId.toString() }));
+                const cReceipts = allReceipts.filter(r => r.recibo.startsWith('C-'));
+                const maxNum = cReceipts.reduce((max, r) => {
+                    const num = parseInt(r.recibo.split('-')[1]);
+                    return isNaN(num) ? max : Math.max(max, num);
+                }, 0);
+                const nextId = maxNum + 1;
+                setFormData((prev: any) => ({ ...prev, recibo: `C-${nextId}` }));
             }
         };
+        const fetchCoffeeTypes = async () => {
+            const types = await api.getCollection<CoffeeType>('coffeeTypes');
+            setCoffeeTypes(types);
+            if (!isEditMode && types.length > 0) {
+                 setFormData((prev: any) => ({ ...prev, tipo: types[0].tipo }));
+            }
+        }
         setReciboNumber();
+        fetchCoffeeTypes();
     }, [isEditMode]);
 
     const calculations = useMemo(() => {
@@ -148,7 +174,7 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
     }, [calculations.taraSugerida, isTaraOverridden]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value, type } = e.target;
+        const { name, value } = e.target;
         const parent = (e.target as HTMLElement).getAttribute('data-parent');
 
         if (parent) {
@@ -162,22 +188,19 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
             return;
         }
         
-        const isCheckbox = type === 'checkbox';
-        if (isCheckbox) {
-            const certValue = (e.target as HTMLInputElement).value;
-            setFormData((prev: any) => ({
-                ...prev,
-                certificacion: prev.certificacion.includes(certValue)
-                    ? prev.certificacion.filter((c: string) => c !== certValue)
-                    : [...prev.certificacion, certValue]
-            }));
-            return;
-        }
-
         const isBooleanSelect = name === 'reciboDevuelto';
         setFormData((prev: any) => ({
             ...prev,
             [name]: isBooleanSelect ? (value === 'true') : value
+        }));
+    };
+
+    const handleCertificationToggle = (cert: string) => {
+        setFormData((prev: any) => ({
+            ...prev,
+            certificacion: prev.certificacion.includes(cert)
+                ? prev.certificacion.filter((c: string) => c !== cert)
+                : [...prev.certificacion, cert]
         }));
     };
 
@@ -189,6 +212,9 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
         }
         setIsSaving(true);
         try {
+            const finalTrillado = existingReceipt?.trillado || 0;
+            const finalEnBodega = calculations.pesoNeto - finalTrillado;
+
             const finalData: Omit<PurchaseReceipt, 'id'> = {
                 ...formData,
                 status: existingReceipt?.status || 'Activo',
@@ -203,24 +229,16 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
                 gRechazo: parseInt(formData.gRechazo) || 0,
                 precioCatadura: parseFloat(formData.precioCatadura) || 0,
                 pesoBrutoEnvio: parseFloat(formData.pesoBrutoEnvio) || 0,
-                trillado: parseFloat(formData.trillado) || 0,
-                enBodega: parseFloat(formData.enBodega) || 0,
-                // FIX: Replaced unsafe dynamic object creation with explicit, type-safe property assignment to resolve TypeScript error.
+                trillado: finalTrillado,
+                enBodega: finalEnBodega,
                 cuppingProfile: {
-                    score: parseFloat(formData.cuppingProfile.score) || 0,
-                    fragranceAroma: parseFloat(formData.cuppingProfile.fragranceAroma) || 0,
-                    flavor: parseFloat(formData.cuppingProfile.flavor) || 0,
-                    aftertaste: parseFloat(formData.cuppingProfile.aftertaste) || 0,
-                    acidity: parseFloat(formData.cuppingProfile.acidity) || 0,
-                    body: parseFloat(formData.cuppingProfile.body) || 0,
-                    balance: parseFloat(formData.cuppingProfile.balance) || 0,
-                    uniformity: parseFloat(formData.cuppingProfile.uniformity) || 0,
-                    cleanCup: parseFloat(formData.cuppingProfile.cleanCup) || 0,
-                    sweetness: parseFloat(formData.cuppingProfile.sweetness) || 0,
-                    notes: formData.cuppingProfile.notes,
-                    defects: formData.cuppingProfile.defects,
+                    humedad: parseFloat(formData.cuppingProfile.humedad) || undefined,
+                    diferencial: parseFloat(formData.cuppingProfile.diferencial) || undefined,
+                    dictamen: formData.cuppingProfile.dictamen,
+                    mezcla: formData.cuppingProfile.mezcla,
                     roastLevel: formData.cuppingProfile.roastLevel,
                     cuppingDate: formData.cuppingProfile.cuppingDate,
+                    notes: formData.cuppingProfile.notes,
                 },
             };
             
@@ -230,6 +248,15 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
             } else {
                 savedReceipt = await api.addDocument<PurchaseReceipt>('purchaseReceipts', finalData);
             }
+            
+            const selectedSupplier = suppliers.find(s => s.id === savedReceipt.proveedorId);
+            if (selectedSupplier) {
+                printComponent(
+                    <ReceiptPDF receipt={savedReceipt} supplier={selectedSupplier} />,
+                    `Recibo-${savedReceipt.recibo}`
+                );
+            }
+
             onSaveSuccess(savedReceipt);
         } catch (error) {
             console.error("Error saving receipt:", error);
@@ -249,47 +276,59 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
                 
                 <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto px-6 space-y-4">
                     
-                    <FormSection title="Información General">
-                        <CalculatedField label="Recibo N.°" value={formData.recibo} />
-                         <div>
+                    <FormSection title="Información General" colorClass="text-blue-600">
+                        <CalculatedField label="Recibo N.°" value={formData.recibo} className="md:col-span-1" />
+                         <div className="md:col-span-1">
                             <label htmlFor="fecha" className="block text-sm font-medium text-muted-foreground">Fecha</label>
                             <input type="date" id="fecha" name="fecha" value={formData.fecha} onChange={handleInputChange} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border" />
                         </div>
-                        <div>
+                        <div className="md:col-span-2">
                             <label htmlFor="proveedorId" className="block text-sm font-medium text-muted-foreground">Proveedor *</label>
                             <select id="proveedorId" name="proveedorId" value={formData.proveedorId} onChange={handleInputChange} required className="mt-1 w-full p-2 border rounded-md bg-secondary border-border">
                                 <option value="">Seleccionar</option>
                                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                         </div>
-                         <div className="md:col-span-1">
+                         <div className="md:col-span-2 md:row-span-2">
                             <label className="block text-sm font-medium text-muted-foreground mb-2">Certificación</label>
-                            <div className="flex flex-col space-y-2 mt-2">
-                                {allCertifications.map(cert => (
-                                    <label key={cert} className="flex items-center gap-2 text-sm font-medium">
-                                        <input type="checkbox" value={cert} name="certificacion" checked={formData.certificacion.includes(cert)} onChange={handleInputChange} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/> {cert}
-                                    </label>
-                                ))}
+                            <div className="flex flex-col space-y-2">
+                                {allCertifications.map(cert => {
+                                    const isSelected = formData.certificacion.includes(cert);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={cert}
+                                            onClick={() => handleCertificationToggle(cert)}
+                                            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border-2 transition-colors text-sm font-semibold w-full justify-start ${
+                                                isSelected
+                                                    ? 'bg-green-500/10 border-green-500 text-green-600 dark:bg-green-500/20 dark:text-green-400'
+                                                    : 'bg-card hover:bg-muted/50 dark:hover:bg-muted/20 border-border'
+                                            }`}
+                                        >
+                                            <span className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-green-500' : 'bg-muted border border-border'}`}>
+                                                {isSelected && <CheckIcon className="w-3.5 h-3.5 text-white" />}
+                                            </span>
+                                            {cert}
+                                        </button>
+                                    )
+                                })}
                             </div>
                         </div>
-                        <TextInput name="placaVehiculo" label="Placa del Vehículo" value={formData.placaVehiculo} onChange={handleInputChange} />
-                        <TextInput name="piloto" label="Piloto" value={formData.piloto} onChange={handleInputChange} />
+                        <TextInput name="placaVehiculo" label="Placa del Vehículo" value={formData.placaVehiculo} onChange={handleInputChange} className="md:col-span-2" />
+                        <TextInput name="piloto" label="Piloto" value={formData.piloto} onChange={handleInputChange} className="md:col-span-2" />
                     </FormSection>
 
-                    <FormSection title="Detalle del Café y Pesos">
-                         <div>
+                    <FormSection title="Detalle del Café y Pesos" colorClass="text-purple-600">
+                         <div className="md:col-span-2">
                             <label htmlFor="tipo" className="block text-sm font-medium text-muted-foreground">Tipo de Café</label>
                             <select id="tipo" name="tipo" value={formData.tipo} onChange={handleInputChange} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border">
-                                {coffeeTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                {coffeeTypes.map(t => <option key={t.id} value={t.tipo}>{t.tipo}</option>)}
                             </select>
-                            {formData.tipo === 'Otro' && (
-                                <input type="text" id="customTipo" name="customTipo" value={formData.customTipo} onChange={handleInputChange} placeholder="Especificar tipo" className="mt-2 w-full p-2 border rounded-md bg-secondary border-border"/>
-                            )}
                         </div>
-                        <NumberInput name="pesoBruto" label="Peso Bruto" value={formData.pesoBruto} onChange={handleInputChange} />
-                        <NumberInput name="yute" label="Yute (sacos)" value={formData.yute} onChange={handleInputChange} step="1" />
-                        <NumberInput name="nylon" label="Nylon (Sacos)" value={formData.nylon} onChange={handleInputChange} step="1" />
-                        <div className="relative">
+                        <NumberInput name="pesoBruto" label="Peso Bruto" value={formData.pesoBruto} onChange={handleInputChange} className="md:col-span-1" />
+                        <NumberInput name="yute" label="Yute (sacos)" value={formData.yute} onChange={handleInputChange} step="1" className="md:col-span-1" />
+                        <NumberInput name="nylon" label="Nylon (Sacos)" value={formData.nylon} onChange={handleInputChange} step="1" className="md:col-span-1" />
+                        <div className="relative md:col-span-1">
                             <NumberInput name="tara" label="Tara" value={formData.tara} onChange={handleInputChange} disabled={!isTaraOverridden} />
                             {user?.role === 'Admin' && (
                                 <div className="absolute top-1 right-1 flex items-center space-x-1">
@@ -298,87 +337,67 @@ const ReceiptForm: React.FC<ReceiptFormProps> = ({ existingReceipt, suppliers, o
                                 </div>
                             )}
                         </div>
-                        <CalculatedField label="Peso Neto" value={calculations.pesoNeto} />
-                        <div><label className="block text-sm font-medium text-muted-foreground">PDF Recibo</label><button type="button" className="mt-1 w-full text-sm p-2 bg-muted hover:bg-muted/50 text-foreground rounded-md">Subir Archivo</button></div>
-                        <div><label className="block text-sm font-medium text-muted-foreground">PDF Envío</label><button type="button" className="mt-1 w-full text-sm p-2 bg-muted hover:bg-muted/50 text-foreground rounded-md">Subir Archivo</button></div>
+                        <CalculatedField label="Peso Neto" value={calculations.pesoNeto} className="md:col-span-2" />
+                        <div className="md:col-span-2"><label className="block text-sm font-medium text-muted-foreground">PDF Recibo</label><button type="button" className="mt-1 w-full text-sm p-2 bg-muted hover:bg-muted/50 text-foreground rounded-md">Subir Archivo</button></div>
+                        <div className="md:col-span-2"><label className="block text-sm font-medium text-muted-foreground">PDF Envío</label><button type="button" className="mt-1 w-full text-sm p-2 bg-muted hover:bg-muted/50 text-foreground rounded-md">Subir Archivo</button></div>
                     </FormSection>
 
-                    <FormSection title="Análisis de Calidad y Rendimiento">
-                        <NumberInput name="gMuestra" label="g Muestra" value={formData.gMuestra} onChange={handleInputChange} step="1" />
-                        <NumberInput name="gPrimera" label="g Primera" value={formData.gPrimera} onChange={handleInputChange} step="1" />
-                        <NumberInput name="gRechazo" label="g Rechazo" value={formData.gRechazo} onChange={handleInputChange} step="1" />
-                        <div />
-                        <CalculatedField label="Primera" value={calculations.primera} />
-                        <CalculatedField label="Rechazo" value={calculations.rechazo} />
-                        <CalculatedField label="Total Bruto" value={calculations.totalBruto} />
-                        <div />
-                        <CalculatedField label="% Rendimiento Total" value={calculations.rendimientoTotal} isPercentage />
-                        <CalculatedField label="% Rendimiento de Primera" value={calculations.rendimientoPrimera} isPercentage />
-                        <CalculatedField label="% Rendimiento de Rechazo" value={calculations.rendimientoRechazo} isPercentage />
-                    </FormSection>
+                    {canViewAnalysis && (
+                        <FormSection title="Análisis de Calidad y Rendimiento" colorClass="text-teal-600">
+                            <NumberInput name="gMuestra" label="g Muestra" value={formData.gMuestra} onChange={handleInputChange} step="1" className="md:col-span-1" />
+                            <NumberInput name="gPrimera" label="g Primera" value={formData.gPrimera} onChange={handleInputChange} step="1" className="md:col-span-1" />
+                            <NumberInput name="gRechazo" label="g Rechazo" value={formData.gRechazo} onChange={handleInputChange} step="1" className="md:col-span-1" />
+                            <div className="md:col-span-3" />
+                            <CalculatedField label="Primera" value={calculations.primera} className="md:col-span-1" />
+                            <CalculatedField label="Rechazo" value={calculations.rechazo} className="md:col-span-1" />
+                            <CalculatedField label="Total Bruto" value={calculations.totalBruto} className="md:col-span-1" />
+                            <div className="md:col-span-3" />
+                            <CalculatedField label="% Rendimiento Total" value={calculations.rendimientoTotal} isPercentage className="md:col-span-2" />
+                            <CalculatedField label="% Rendimiento de Primera" value={calculations.rendimientoPrimera} isPercentage className="md:col-span-2" />
+                            <CalculatedField label="% Rendimiento de Rechazo" value={calculations.rendimientoRechazo} isPercentage className="md:col-span-2" />
+                        </FormSection>
+                    )}
 
-                    <FormSection title="Perfil de Catación">
-                        <NumberInput parent="cuppingProfile" name="score" label="Puntaje Final (SCA)" value={formData.cuppingProfile.score} onChange={handleInputChange} min="0" max="100"/>
-                        <NumberInput parent="cuppingProfile" name="fragranceAroma" label="Fragancia/Aroma" value={formData.cuppingProfile.fragranceAroma} onChange={handleInputChange} min="6" max="10" />
-                        <NumberInput parent="cuppingProfile" name="flavor" label="Sabor" value={formData.cuppingProfile.flavor} onChange={handleInputChange} min="6" max="10" />
-                        <NumberInput parent="cuppingProfile" name="aftertaste" label="Sabor Residual" value={formData.cuppingProfile.aftertaste} onChange={handleInputChange} min="6" max="10" />
-                        <NumberInput parent="cuppingProfile" name="acidity" label="Acidez" value={formData.cuppingProfile.acidity} onChange={handleInputChange} min="6" max="10" />
-                        <NumberInput parent="cuppingProfile" name="body" label="Cuerpo" value={formData.cuppingProfile.body} onChange={handleInputChange} min="6" max="10" />
-                        <NumberInput parent="cuppingProfile" name="balance" label="Balance" value={formData.cuppingProfile.balance} onChange={handleInputChange} min="6" max="10" />
-                         <div />
-                        <NumberInput parent="cuppingProfile" name="uniformity" label="Uniformidad" value={formData.cuppingProfile.uniformity} onChange={handleInputChange} min="0" max="10" />
-                        <NumberInput parent="cuppingProfile" name="cleanCup" label="Taza Limpia" value={formData.cuppingProfile.cleanCup} onChange={handleInputChange} min="0" max="10" />
-                        <NumberInput parent="cuppingProfile" name="sweetness" label="Dulzura" value={formData.cuppingProfile.sweetness} onChange={handleInputChange} min="0" max="10" />
-                         <div />
-                         <div className="md:col-span-2">
-                            <label htmlFor="notes" className="block text-sm font-medium text-muted-foreground">Notas del Catador</label>
-                            <textarea id="notes" name="notes" data-parent="cuppingProfile" value={formData.cuppingProfile.notes} onChange={handleInputChange} rows={3} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border" />
-                        </div>
-                         <div className="md:col-span-2">
-                             <TextInput parent="cuppingProfile" name="defects" label="Defectos" value={formData.cuppingProfile.defects} onChange={handleInputChange} />
-                         </div>
-                         <div>
+                    <FormSection title="Perfil de Catación" colorClass="text-orange-600">
+                        <NumberInput parent="cuppingProfile" name="humedad" label="Humedad (%)" value={formData.cuppingProfile.humedad} onChange={handleInputChange} min="0" max="100" className="md:col-span-1"/>
+                        <TextInput parent="cuppingProfile" name="dictamen" label="Dictamen" value={formData.cuppingProfile.dictamen} onChange={handleInputChange} className="md:col-span-2" />
+                        <NumberInput parent="cuppingProfile" name="diferencial" label="Diferencial" value={formData.cuppingProfile.diferencial} onChange={handleInputChange} className="md:col-span-1"/>
+                        <TextInput parent="cuppingProfile" name="mezcla" label="Mezcla" value={formData.cuppingProfile.mezcla} onChange={handleInputChange} className="md:col-span-2" />
+                        <div className="md:col-span-2">
                             <label htmlFor="roastLevel" className="block text-sm font-medium text-muted-foreground">Nivel de Tueste</label>
                             <select id="roastLevel" name="roastLevel" data-parent="cuppingProfile" value={formData.cuppingProfile.roastLevel} onChange={handleInputChange} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border">
                                 {roastLevels.map(t => <option key={t} value={t}>{t || 'Seleccionar'}</option>)}
                             </select>
                         </div>
-                        <div>
+                        <div className="md:col-span-2">
                             <label htmlFor="cuppingDate" className="block text-sm font-medium text-muted-foreground">Fecha de Catación</label>
                             <input type="date" id="cuppingDate" name="cuppingDate" data-parent="cuppingProfile" value={formData.cuppingProfile.cuppingDate} onChange={handleInputChange} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border" />
                         </div>
+                        <TextInput parent="cuppingProfile" name="notes" label="Notas del Catador" value={formData.cuppingProfile.notes} onChange={handleInputChange} isTextArea className="md:col-span-6"/>
                     </FormSection>
 
-                     <FormSection title="Costos y Almacenamiento">
-                        <NumberInput name="precio" label="Precio (Q)" value={formData.precio} onChange={handleInputChange}/>
-                        <CalculatedField label="Total Compra (Q)" value={calculations.totalCompra} isCurrency />
-                        <NumberInput name="precioCatadura" label="Precio Catadura (Q)" value={formData.precioCatadura} onChange={handleInputChange} />
-                        <CalculatedField label="Costo Catadura (Q)" value={calculations.costoCatadura} isCurrency />
+                    {canViewCosts && (
+                        <FormSection title="Costos" colorClass="text-red-600">
+                            <NumberInput name="precio" label="Precio (Q)" value={formData.precio} onChange={handleInputChange} className="md:col-span-1"/>
+                            <CalculatedField label="Total Compra (Q)" value={calculations.totalCompra} isCurrency className="md:col-span-2" />
+                            <NumberInput name="precioCatadura" label="Precio Catadura (Q)" value={formData.precioCatadura} onChange={handleInputChange} className="md:col-span-1"/>
+                            <CalculatedField label="Costo Catadura (Q)" value={calculations.costoCatadura} isCurrency className="md:col-span-2"/>
+                            <NumberInput name="pesoBrutoEnvio" label="Peso Bruto Envío" value={formData.pesoBrutoEnvio} onChange={handleInputChange} className="md:col-span-2"/>
+                            <CalculatedField label="Diferencia" value={calculations.diferencia} className="md:col-span-2"/>
+                        </FormSection>
+                    )}
 
-                        <NumberInput name="pesoBrutoEnvio" label="Peso Bruto Envío" value={formData.pesoBrutoEnvio} onChange={handleInputChange} />
-                        <CalculatedField label="Diferencia" value={calculations.diferencia} />
-                        <div className="md:col-span-2" />
-
-                        <div className="md:col-span-2 pt-4 border-t border-border">
-                            <NumberInput name="trillado" label="Trillado" value={formData.trillado} onChange={handleInputChange} />
+                    <FormSection title="Almacenamiento y Estado" colorClass="text-indigo-600">
+                        <CalculatedField label="Trillado" value={existingReceipt?.trillado || 0} className="md:col-span-3"/>
+                        <CalculatedField label="En Bodega" value={calculations.pesoNeto - (existingReceipt?.trillado || 0)} className="md:col-span-3"/>
+                        <div className="md:col-span-6">
+                            <label className="block text-sm font-medium text-muted-foreground">Recibo devuelto</label>
+                            <div className="mt-2">
+                                <ToggleSwitch id="reciboDevuelto" checked={formData.reciboDevuelto} onChange={checked => setFormData((prev: any) => ({ ...prev, reciboDevuelto: checked }))} />
+                            </div>
                         </div>
-                        <div className="md:col-span-2 pt-4 border-t border-border">
-                           <NumberInput name="enBodega" label="En Bodega" value={formData.enBodega} onChange={handleInputChange} />
-                        </div>
-
-                        <div className="md:col-span-2">
-                             <label htmlFor="reciboDevuelto" className="block text-sm font-medium text-muted-foreground">Recibo devuelto</label>
-                            <select id="reciboDevuelto" name="reciboDevuelto" value={String(formData.reciboDevuelto)} onChange={handleInputChange} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border">
-                               <option value="false">No</option>
-                               <option value="true">Sí</option>
-                            </select>
-                        </div>
-                         <div className="md:col-span-4">
-                            <label htmlFor="notas" className="block text-sm font-medium text-muted-foreground">Notas</label>
-                            <textarea id="notas" name="notas" value={formData.notas} onChange={handleInputChange} rows={3} className="mt-1 w-full p-2 border rounded-md bg-secondary border-border" />
-                        </div>
+                        <TextInput name="notas" label="Notas" value={formData.notas} onChange={handleInputChange} isTextArea className="md:col-span-6"/>
                     </FormSection>
-
                 </form>
                  <div className="flex-shrink-0 flex justify-end gap-4 p-6 border-t border-border">
                     <button type="button" onClick={onCancel} className="px-6 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">Cancelar</button>

@@ -1,31 +1,41 @@
-
-export interface User {
-  uid: string;
-  email: string | null;
-  displayName?: string | null;
-  role: string;
+export interface PagePermissions {
+    view: boolean;
+    add: boolean;
+    edit: boolean;
+    delete: boolean;
+    viewCosts?: boolean;
+    viewAnalysis?: boolean;
 }
+
+export interface AppRole {
+    id: string;
+    name: string;
+    isDefault: boolean;
+    permissions: { [key: string]: PagePermissions };
+}
+
+export type AppUserRole = 'Admin' | 'Manager' | 'User';
 
 export interface AppUser {
     id?: string;
     email: string;
-    role: 'Admin' | 'Manager' | 'User';
+    role: AppUserRole;
 }
 
-export interface AppRole {
-    id?: string;
-    name: string;
-    isDefault: boolean;
+export interface User {
+    uid: string;
+    email: string;
+    role: string;
 }
 
 export interface Exporter {
-    id?: string;
+    id: string;
     name: string;
     licenseNumber: string;
 }
 
 export interface Buyer {
-    id?: string;
+    id: string;
     name: string;
     address: string;
     contactPerson: string;
@@ -34,22 +44,17 @@ export interface Buyer {
 }
 
 export interface Supplier {
-    id?: string;
+    id: string;
     name: string;
     phone: string;
     email: string;
 }
 
 export interface Client {
-    id?: string;
+    id: string;
     name: string;
     phone: string;
     email: string;
-}
-
-export interface Seller {
-    id?: string;
-    name: string;
 }
 
 export interface Contract {
@@ -61,19 +66,17 @@ export interface Contract {
     buyerName: string;
     saleDate: string;
     coffeeType: string;
-    quantity: number; 
+    quantity: number;
     position: string;
     differential: number;
     priceUnit: 'CTS/LB' | '46 Kg.';
     shipmentMonth: string;
     isFinished: boolean;
     certifications: string[];
-    contractPdfUrl?: string;
-    instructionsPdfUrl?: string;
 }
 
 export interface ContractLot {
-    id?: string;
+    id: string;
     contractId: string;
     partida: string;
     bultos: number;
@@ -83,127 +86,221 @@ export interface ContractLot {
     fijacion: number;
     fechaFijacion: string;
     precioFinal: number;
-    pdfFijacionUrl?: string;
     guiaMuestra: string;
     fechaEnvioMuestra: string;
     muestraAprobada: boolean;
     destino: string;
     isf: boolean;
+    isfSent: boolean;
     booking: string;
     naviera: string;
     valorCobro: number;
-    paymentStatus: 'unpaid' | 'in-progress' | 'paid';
 }
 
 export interface CuppingProfile {
-  score: number;
-  fragranceAroma: number;
-  flavor: number;
-  aftertaste: number;
-  acidity: number;
-  body: number;
-  balance: number;
-  uniformity: number;
-  cleanCup: number;
-  sweetness: number;
-  notes: string;
-  defects: string;
-  roastLevel: 'Ligero' | 'Medio' | 'Oscuro' | '';
-  cuppingDate: string;
+    humedad?: number;
+    dictamen?: string;
+    diferencial?: number;
+    mezcla?: string;
+    roastLevel?: '' | 'Ligero' | 'Medio' | 'Oscuro';
+    cuppingDate: string;
+    notes?: string;
 }
 
 export interface PurchaseReceipt {
     id: string;
-    status: 'Activo' | 'Anulado';
-    // General Info
     certificacion: string[];
-    fecha: string; 
-    recibo: string; 
+    fecha: string;
+    recibo: string;
     proveedorId: string;
     placaVehiculo: string;
     piloto: string;
-    // Coffee Type
     tipo: string;
     customTipo?: string;
-    // Weight
     pesoBruto: number;
     yute: number;
     nylon: number;
     tara: number;
-    pesoNeto: number; 
-    pdfReciboUrl?: string;
-    pdfEnvioUrl?: string;
-    // Quality Analysis
     precio: number;
     gMuestra: number;
     gPrimera: number;
     gRechazo: number;
-    primera: number; 
-    rechazo: number; 
-    totalBruto: number;
     precioCatadura: number;
-    // Yields
+    pesoBrutoEnvio: number;
+    reciboDevuelto: boolean;
+    notas: string;
+    cuppingProfile: CuppingProfile;
+    status: 'Activo' | 'Anulado';
+    pesoNeto: number;
+    primera: number;
+    rechazo: number;
+    totalBruto: number;
     rendimientoTotal: number;
     rendimientoPrimera: number;
     rendimientoRechazo: number;
-    // Costs
     totalCompra: number;
     costoCatadura: number;
-    pesoBrutoEnvio: number;
     diferencia: number;
-    // Storage
     trillado: number;
     enBodega: number;
-    reciboDevuelto: boolean;
-    notas: string;
-    // Cupping
-    cuppingProfile?: CuppingProfile;
-  }
+    devuelto: number;
+}
 
 export interface ThreshingOrder {
-  id: string;
-  contractId: string;
-  orderNumber: string;
-  creationDate: string;
-  lotIds: string[];
-  notes: string;
-  totalToThresh: number;
-  totalPrimeras: number;
-  totalCatadura: number;
+    id: string;
+    contractId: string | null;
+    orderNumber: string;
+    creationDate: string;
+    lotIds: string[];
+    notes: string;
+    totalToThresh: number;
+    totalPrimeras: number;
+    totalCatadura: number;
+    orderType: 'Exportación' | 'Venta Local';
+    clientId?: string | null;
+    clientName?: string;
+    description?: string;
+    lote?: string;
+    tipoPreparacion?: string;
+    pesoVendido?: number;
 }
 
 export interface ThreshingOrderReceipt {
-  id: string;
-  threshingOrderId: string;
-  receiptId: string;
-  supplierName: string;
-  coffeeType: string;
-  receiptNumber: string;
-  amountToThresh: number;
-  primeras: number;
-  catadura: number;
+    id?: string;
+    threshingOrderId: string;
+    receiptId: string;
+    receiptNumber: string;
+    supplierName: string;
+    coffeeType: string;
+    amountToThresh: number;
+    primeras: number;
+    catadura: number;
 }
 
-// FIX: Add missing Factura and Payment types
-export interface Factura {
+export interface CoffeeType {
     id: string;
-    facturaNumber: string;
-    buyerId: string;
-    buyerName: string;
-    issueDate: string;
-    dueDate: string;
-    lotIds: string[];
-    totalAmount: number;
-    status: 'Draft' | 'Sent' | 'PartiallyPaid' | 'Paid' | 'Overdue';
-    notes: string;
+    tipo: string;
 }
 
-export interface Payment {
+export interface ByproductType {
     id: string;
-    facturaId: string;
-    date: string;
-    amount: number;
-    method: 'Transferencia' | 'Cheque' | 'Efectivo' | 'Otro';
-    reference: string;
+    tipo: string;
+}
+
+export interface Viñeta {
+    id: string;
+    numeroViñeta: string;
+    tipo: string;
+    pesoNeto: number;
+    originalPesoNeto: number;
+    notas: string;
+    status: 'En Bodega' | 'Reprocesado' | 'Mezclada' | 'Utilizada en Trilla' | 'Vendido' | 'Mezclada Parcialmente';
+}
+
+export interface Rendimiento {
+    id: string;
+    rendimientoNumber: string;
+    creationDate: string;
+    threshingOrderIds: string[];
+    vignettes: Viñeta[];
+    totalProyectadoPrimeras: number;
+    totalProyectadoCatadura: number;
+    totalRealPrimeras: number;
+    totalRealCatadura: number;
+}
+
+export interface Reproceso {
+    id: string;
+    reprocesoNumber: string;
+    creationDate: string;
+    inputVignetteIds: string[];
+    inputVignettesData: Viñeta[];
+    outputVignettes: Viñeta[];
+    totalInputWeight: number;
+    totalOutputWeight: number;
+    merma: number;
     notes: string;
+    status: 'Activo' | 'Anulado';
+    inputVignetteProjections?: Record<string, { porcentajePrimeras: number; porcentajeCatadura: number }>;
+    totalProyectadoPrimeras?: number;
+    totalProyectadoCatadura?: number;
+    totalRealPrimeras?: number;
+    totalRealCatadura?: number;
+}
+
+export interface MezclaVignetteInput {
+    vignetteId: string;
+    vignetteNumber: string;
+    tipo: string;
+    pesoUtilizado: number;
+}
+
+export interface Mezcla {
+    id: string;
+    mezclaNumber: string;
+    creationDate: string;
+    inputVignetteIds: string[];
+    inputVignettesData: MezclaVignetteInput[];
+    totalInputWeight: number;
+    tipoMezcla: string;
+    cantidadDespachada: number;
+    sobranteEnBodega: number;
+    status: 'Activo' | 'Anulado';
+}
+
+export interface SalidaMezclaInput {
+    mezclaId: string;
+    mezclaNumber: string;
+    pesoUtilizado: number;
+    descripcionEnvio: string;
+    sacosYute: number;
+    sacosNylon: number;
+}
+
+export interface SalidaReciboInput {
+    reciboId: string;
+    reciboNumber: string;
+    proveedorName: string;
+    tipoCafe: string;
+    pesoDevuelto: number;
+    descripcionDevolucion: string;
+    sacosYute: number;
+    sacosNylon: number;
+}
+
+export interface Salida {
+    id: string;
+    salidaNumber: string;
+    fecha: string;
+    tipoSalida: 'Mezcla' | 'Devolución Recibo';
+    
+    placaVehiculo: string;
+    piloto: string;
+
+    sacosYute: number;
+    sacosNylon: number;
+    pesoNeto: number;
+    tara: number;
+    pesoBruto: number;
+    isExportacion: boolean;
+    cartaPorte?: string;
+    partidas?: string;
+    notas?: string;
+    status: 'Activo' | 'Anulado';
+
+    // Used for both types now
+    clienteId?: string;
+    clienteName?: string;
+
+    // Mezcla Specific
+    mezclas?: SalidaMezclaInput[];
+
+    // Recibo Specific
+    recibos?: SalidaReciboInput[];
+}
+
+
+export interface Seller {
+    id: string;
+    name: string;
 }

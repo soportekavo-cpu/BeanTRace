@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, ContractLot, Exporter } from '../types';
+import ToggleSwitch from './ToggleSwitch';
 
 interface AddContractLotFormProps {
     contract: Contract;
@@ -25,10 +26,10 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
         muestraAprobada: false,
         destino: '',
         isf: false,
+        isfSent: false,
         booking: '',
         naviera: '',
         valorCobro: 0,
-        paymentStatus: 'unpaid',
     };
 
     const [lot, setLot] = useState<any>(initialLotState);
@@ -45,10 +46,11 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
     
     useEffect(() => {
         const setPartidaNumber = async () => {
-            const allLots = await api.getCollection<ContractLot>('contractLots');
+            // Fetch only lots for the current exporter to calculate the correct correlative.
+            const exporterLots = await api.getCollection<ContractLot>('contractLots', l => l.partida.startsWith(`11/${exporter.licenseNumber}/`));
             let nextNum = 1;
-            if (allLots.length > 0) {
-                const usedCorrelatives = Array.from(new Set(allLots
+            if (exporterLots.length > 0) {
+                const usedCorrelatives = Array.from(new Set(exporterLots
                     .map(l => parseInt(l.partida.split('/')[2], 10))
                     .filter(n => !isNaN(n))))
                     .sort((a, b) => a - b);
@@ -57,7 +59,7 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
                     if (num === nextNum) {
                         nextNum++;
                     } else {
-                        break;
+                        break; // Found a gap
                     }
                 }
             }
@@ -65,7 +67,7 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
             setLot((prev: any) => ({...prev, partida}));
         };
         setPartidaNumber();
-    }, [exporter.licenseNumber, existingLots]);
+    }, [exporter.licenseNumber]);
 
     const calculatePesoQqs = (bultos: number, pesoKg: number, priceUnit: 'CTS/LB' | '46 Kg.') => {
         if (bultos <= 0 || pesoKg <= 0) return 0;
@@ -143,9 +145,13 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
     };
 
     return (
-        <div className="pt-6 mt-4 border-t">
-            <h4 className="text-md font-semibold text-foreground mb-4">Nueva Partida</h4>
-            <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-6">
+            <button onClick={onCancel} className="text-sm font-medium text-green-600 hover:underline">
+                &larr; Volver al Contrato
+            </button>
+            <h2 className="text-2xl font-bold text-foreground">Agregar Partida al Contrato <span className="text-green-600">{contract.contractNumber}</span></h2>
+            
+            <form onSubmit={handleSubmit} className="space-y-6 bg-card border border-border rounded-lg shadow-sm p-6 mt-6">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div><label className="text-sm text-muted-foreground">Partida</label><p className="font-semibold text-green-600 dark:text-green-400 mt-1 p-2">{lot.partida || '...'}</p></div>
                     <div><label htmlFor="bultos" className="text-sm text-muted-foreground">No. Bultos</label><input type="number" id="bultos" name="bultos" value={lot.bultos} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
@@ -176,26 +182,28 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6 items-center">
                     <div><label htmlFor="guiaMuestra" className="text-sm text-muted-foreground">Guía Muestra</label><input type="text" id="guiaMuestra" name="guiaMuestra" value={lot.guiaMuestra} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                     <div><label htmlFor="fechaEnvioMuestra" className="text-sm text-muted-foreground">Fecha Envío Muestra</label><input type="date" id="fechaEnvioMuestra" name="fechaEnvioMuestra" value={lot.fechaEnvioMuestra} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                    <div className="w-full"><label htmlFor="muestraAprobada" className="text-sm text-muted-foreground">Muestra Aprobada</label>
-                        <select name="muestraAprobada" id="muestraAprobada" value={String(lot.muestraAprobada)} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
-                            <option value="false">No</option>
-                            <option value="true">Sí</option>
-                        </select>
+                    <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Muestra Aprobada</label>
+                        <ToggleSwitch id="muestraAprobada" checked={lot.muestraAprobada} onChange={(checked) => setLot((prev: any) => ({ ...prev, muestraAprobada: checked }))} />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div><label htmlFor="destino" className="text-sm text-muted-foreground">Destino</label><input type="text" id="destino" name="destino" value={lot.destino} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input" placeholder="Ej: New York, USA"/></div>
-                    <div><label htmlFor="isf" className="text-sm text-muted-foreground">ISF Requerido</label>
-                        <select name="isf" id="isf" value={String(lot.isf)} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input">
-                            <option value="false">No</option>
-                            <option value="true">Sí</option>
-                        </select>
-                        {showIsfSuggestion && <p className="text-xs text-blue-500 mt-1">Destino parece ser EE.UU. ¿Se requiere ISF?</p>}
+                    <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">ISF Requerido</label>
+                        <ToggleSwitch id="isf" checked={lot.isf} onChange={(checked) => setLot((prev: any) => ({...prev, isf: checked, isfSent: checked ? prev.isfSent : false }))} />
+                        {showIsfSuggestion && !lot.isf && <p className="text-xs text-blue-500 mt-1">Destino parece ser EE.UU. ¿Se requiere ISF?</p>}
                     </div>
+                     {lot.isf && (
+                        <div>
+                            <label className="text-sm text-muted-foreground mb-2 block">ISF Enviado</label>
+                            <ToggleSwitch id="isfSent" checked={lot.isfSent} onChange={(checked) => setLot((prev: any) => ({ ...prev, isfSent: checked }))} />
+                        </div>
+                    )}
                     <div><label htmlFor="booking" className="text-sm text-muted-foreground">Booking</label><input type="text" id="booking" name="booking" value={lot.booking} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
                     <div className="space-y-1">
                         <label htmlFor="naviera" className="text-sm text-muted-foreground">Naviera</label>

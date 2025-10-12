@@ -1,14 +1,15 @@
-
-import React, { useState, useEffect } from 'react';
-import ReactDOMServer from 'react-dom/server';
+import React, { useState, useEffect, useMemo } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { PurchaseReceipt, Supplier } from '../types';
+import { PurchaseReceipt, Supplier, ThreshingOrderReceipt, ThreshingOrder, ContractLot } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import ReceiptForm from '../components/ReceiptForm';
 import ReceiptPDF from '../components/ReceiptPDF';
 import EyeIcon from '../components/icons/EyeIcon';
+import { printComponent } from '../utils/printUtils';
+import ToggleSwitch from '../components/ToggleSwitch';
 
 const formatDate = (dateString: string) => {
     if (!dateString || !dateString.includes('-')) return '';
@@ -29,7 +30,58 @@ const CalculatedFieldDisplay: React.FC<{ label: string, value: string | number, 
 );
 
 
-const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplier | undefined; onClose: () => void; onGeneratePdf: (receipt: PurchaseReceipt) => void; }> = ({ receipt, supplier, onClose, onGeneratePdf }) => {
+const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplier | undefined; onClose: () => void; onGeneratePdf: (receipt: PurchaseReceipt) => void; canViewCosts: boolean; canViewAnalysis: boolean; }> = ({ receipt, supplier, onClose, onGeneratePdf, canViewCosts, canViewAnalysis }) => {
+    
+    interface UsageHistoryItem {
+        orderNumber: string;
+        partidas: string;
+        amountUsed: number;
+    }
+    const [usageHistory, setUsageHistory] = useState<UsageHistoryItem[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(true);
+
+    useEffect(() => {
+        const fetchUsageHistory = async () => {
+            if (!receipt) return;
+            setLoadingHistory(true);
+            try {
+                const orderReceipts = await api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts', r => r.receiptId === receipt.id);
+                if (orderReceipts.length > 0) {
+                    const orderIds = orderReceipts.map(or => or.threshingOrderId);
+                    
+                    const [allOrders, allLots] = await Promise.all([
+                        api.getCollection<ThreshingOrder>('threshingOrders', o => orderIds.includes(o.id)),
+                        api.getCollection<ContractLot>('contractLots')
+                    ]);
+                    
+                    const history = orderReceipts.map(or => {
+                        const order = allOrders.find(o => o.id === or.threshingOrderId);
+                        if (!order) return null;
+
+                        const partidas = order.lotIds.map(lotId => allLots.find(l => l.id === lotId)?.partida || 'N/A').join(', ');
+
+                        return {
+                            orderNumber: order.orderNumber,
+                            partidas: partidas,
+                            amountUsed: or.amountToThresh,
+                        };
+                    }).filter((item): item is UsageHistoryItem => item !== null);
+                    
+                    setUsageHistory(history);
+                } else {
+                    setUsageHistory([]);
+                }
+            } catch(error) {
+                console.error("Error fetching usage history:", error);
+                setUsageHistory([]);
+            } finally {
+                setLoadingHistory(false);
+            }
+        };
+
+        fetchUsageHistory();
+    }, [receipt]);
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose}>
             <div className="bg-card p-6 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto relative" onClick={e => e.stopPropagation()}>
@@ -45,7 +97,7 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                 <div className="space-y-6 text-sm">
                     {/* General */}
                     <div className="border-b pb-4">
-                        <h4 className="text-lg font-semibold text-foreground mb-3">Información General</h4>
+                        <h4 className="text-lg font-semibold text-blue-600 mb-3">Información General</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <CalculatedFieldDisplay label="Fecha" value={formatDate(receipt.fecha)} />
                             <CalculatedFieldDisplay label="Proveedor" value={supplier?.name || 'N/A'} />
@@ -56,7 +108,7 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                     </div>
                     {/* Pesos */}
                     <div className="border-b pb-4">
-                        <h4 className="text-lg font-semibold text-foreground mb-3">Detalle del Café y Pesos</h4>
+                        <h4 className="text-lg font-semibold text-purple-600 mb-3">Detalle del Café y Pesos</h4>
                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <CalculatedFieldDisplay label="Tipo de Café" value={receipt.tipo === 'Otro' ? receipt.customTipo || receipt.tipo : receipt.tipo} />
                             <CalculatedFieldDisplay label="Peso Bruto" value={receipt.pesoBruto} />
@@ -67,66 +119,87 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                         </div>
                     </div>
                      {/* Analisis */}
-                    <div className="border-b pb-4">
-                        <h4 className="text-lg font-semibold text-foreground mb-3">Análisis de Calidad y Rendimiento</h4>
-                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <CalculatedFieldDisplay label="g Muestra" value={receipt.gMuestra} />
-                            <CalculatedFieldDisplay label="g Primera" value={receipt.gPrimera} />
-                            <CalculatedFieldDisplay label="g Rechazo" value={receipt.gRechazo} />
-                            <div />
-                            <CalculatedFieldDisplay label="Primera" value={receipt.primera} />
-                            <CalculatedFieldDisplay label="Rechazo" value={receipt.rechazo} />
-                            <CalculatedFieldDisplay label="Total Bruto" value={receipt.totalBruto} />
-                            <div />
-                            <CalculatedFieldDisplay label="% Rendimiento Total" value={receipt.rendimientoTotal} isPercentage />
-                            <CalculatedFieldDisplay label="% Rendimiento Primera" value={receipt.rendimientoPrimera} isPercentage />
-                            <CalculatedFieldDisplay label="% Rendimiento Rechazo" value={receipt.rendimientoRechazo} isPercentage />
+                    {canViewAnalysis && (
+                        <div className="border-b pb-4">
+                            <h4 className="text-lg font-semibold text-teal-600 mb-3">Análisis de Calidad y Rendimiento</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <CalculatedFieldDisplay label="g Muestra" value={receipt.gMuestra} />
+                                <CalculatedFieldDisplay label="g Primera" value={receipt.gPrimera} />
+                                <CalculatedFieldDisplay label="g Rechazo" value={receipt.gRechazo} />
+                                <div />
+                                <CalculatedFieldDisplay label="Primera" value={receipt.primera} />
+                                <CalculatedFieldDisplay label="Rechazo" value={receipt.rechazo} />
+                                <CalculatedFieldDisplay label="Total Bruto" value={receipt.totalBruto} />
+                                <div />
+                                <CalculatedFieldDisplay label="% Rendimiento Total" value={receipt.rendimientoTotal} isPercentage />
+                                <CalculatedFieldDisplay label="% Rendimiento Primera" value={receipt.rendimientoPrimera} isPercentage />
+                                <CalculatedFieldDisplay label="% Rendimiento Rechazo" value={receipt.rendimientoRechazo} isPercentage />
+                            </div>
                         </div>
-                    </div>
+                    )}
                      {/* Catacion */}
                      {receipt.cuppingProfile && (
                         <div className="border-b pb-4">
-                            <h4 className="text-lg font-semibold text-foreground mb-3">Perfil de Catación</h4>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                <CalculatedFieldDisplay label="Puntaje Final (SCA)" value={receipt.cuppingProfile.score} className="text-lg font-bold text-blue-500" />
-                                <CalculatedFieldDisplay label="Nivel de Tueste" value={receipt.cuppingProfile.roastLevel} />
+                            <h4 className="text-lg font-semibold text-orange-600 mb-3">Perfil de Catación</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <CalculatedFieldDisplay label="Humedad" value={`${receipt.cuppingProfile.humedad || 0}%`} />
+                                <CalculatedFieldDisplay label="Diferencial" value={receipt.cuppingProfile.diferencial || 0} />
+                                <CalculatedFieldDisplay label="Nivel de Tueste" value={receipt.cuppingProfile.roastLevel || 'N/A'} />
                                 <CalculatedFieldDisplay label="Fecha Catación" value={formatDate(receipt.cuppingProfile.cuppingDate)} />
-                            </div>
-                            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mt-4">
-                                <CalculatedFieldDisplay label="Fragancia/Aroma" value={receipt.cuppingProfile.fragranceAroma} />
-                                <CalculatedFieldDisplay label="Sabor" value={receipt.cuppingProfile.flavor} />
-                                <CalculatedFieldDisplay label="Sabor Residual" value={receipt.cuppingProfile.aftertaste} />
-                                <CalculatedFieldDisplay label="Acidez" value={receipt.cuppingProfile.acidity} />
-                                <CalculatedFieldDisplay label="Cuerpo" value={receipt.cuppingProfile.body} />
-                                <CalculatedFieldDisplay label="Balance" value={receipt.cuppingProfile.balance} />
-                                <CalculatedFieldDisplay label="Uniformidad" value={receipt.cuppingProfile.uniformity} />
-                                <CalculatedFieldDisplay label="Taza Limpia" value={receipt.cuppingProfile.cleanCup} />
-                                <CalculatedFieldDisplay label="Dulzura" value={receipt.cuppingProfile.sweetness} />
-                            </div>
-                            <div className="mt-4">
-                                <CalculatedFieldDisplay label="Notas del Catador" value={receipt.cuppingProfile.notes} />
-                            </div>
-                             <div className="mt-4">
-                                <CalculatedFieldDisplay label="Defectos" value={receipt.cuppingProfile.defects} />
+                                <CalculatedFieldDisplay label="Dictamen" value={receipt.cuppingProfile.dictamen || 'N/A'} className="col-span-2"/>
+                                <CalculatedFieldDisplay label="Mezcla" value={receipt.cuppingProfile.mezcla || 'N/A'} className="col-span-2"/>
+                                <CalculatedFieldDisplay label="Notas del Catador" value={receipt.cuppingProfile.notes || 'N/A'} className="col-span-full"/>
                             </div>
                         </div>
                      )}
                     {/* Costos */}
-                    <div>
-                        <h4 className="text-lg font-semibold text-foreground mb-3">Costos y Almacenamiento</h4>
-                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <CalculatedFieldDisplay label="Precio (Q)" value={receipt.precio} isCurrency />
-                            <CalculatedFieldDisplay label="Total Compra (Q)" value={receipt.totalCompra} isCurrency />
-                            <CalculatedFieldDisplay label="Precio Catadura (Q)" value={receipt.precioCatadura} isCurrency />
-                            <CalculatedFieldDisplay label="Costo Catadura (Q)" value={receipt.costoCatadura} isCurrency />
-                             <CalculatedFieldDisplay label="Peso Bruto Envío" value={receipt.pesoBrutoEnvio} />
-                             <CalculatedFieldDisplay label="Diferencia" value={receipt.diferencia} />
-                             <div className="md:col-span-2" />
-                             <CalculatedFieldDisplay label="Trillado" value={receipt.trillado} />
-                             <CalculatedFieldDisplay label="En Bodega" value={receipt.enBodega} />
-                             <CalculatedFieldDisplay label="Recibo Devuelto" value={receipt.reciboDevuelto ? 'Sí' : 'No'} />
-                             <CalculatedFieldDisplay label="Notas" value={receipt.notas} className="col-span-full"/>
+                    {canViewCosts && (
+                        <div className="border-b pb-4">
+                            <h4 className="text-lg font-semibold text-red-600 mb-3">Costos</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <CalculatedFieldDisplay label="Precio (Q)" value={receipt.precio} isCurrency />
+                                <CalculatedFieldDisplay label="Total Compra (Q)" value={receipt.totalCompra} isCurrency />
+                                <CalculatedFieldDisplay label="Precio Catadura (Q)" value={receipt.precioCatadura} isCurrency />
+                                <CalculatedFieldDisplay label="Costo Catadura (Q)" value={receipt.costoCatadura} isCurrency />
+                                <CalculatedFieldDisplay label="Peso Bruto Envío" value={receipt.pesoBrutoEnvio} />
+                                <CalculatedFieldDisplay label="Diferencia" value={receipt.diferencia} />
+                            </div>
                         </div>
+                    )}
+                     {/* Almacenamiento */}
+                     <div className="border-b pb-4">
+                        <h4 className="text-lg font-semibold text-indigo-600 mb-3">Almacenamiento</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                             <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800">
+                                <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">Trillado</p>
+                                <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{receipt.trillado.toFixed(2)}</p>
+                            </div>
+                            <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-900/50 border border-purple-200 dark:border-purple-800">
+                                <p className="text-sm text-purple-800 dark:text-purple-300 font-medium">En Bodega</p>
+                                <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{receipt.enBodega.toFixed(2)}</p>
+                            </div>
+                            <CalculatedFieldDisplay label="Recibo Devuelto" value={receipt.reciboDevuelto ? 'Sí' : 'No'} />
+                            <CalculatedFieldDisplay label="Notas" value={receipt.notas} className="col-span-full"/>
+                        </div>
+                    </div>
+                     {/* Historial de Uso */}
+                     <div>
+                        <h4 className="text-lg font-semibold text-gray-600 mb-3">Historial de Uso en Trilla</h4>
+                        {loadingHistory ? (
+                             <p className="text-muted-foreground">Cargando historial...</p>
+                        ) : usageHistory.length > 0 ? (
+                            <div className="space-y-3">
+                                {usageHistory.map((item, index) => (
+                                    <div key={index} className="p-3 rounded-lg bg-muted/50 border border-border">
+                                        <p className="font-semibold text-foreground">Orden de Trilla: {item.orderNumber}</p>
+                                        <p className="text-sm text-muted-foreground">Partida(s): {item.partidas}</p>
+                                        <p className="text-sm">Cantidad Utilizada: <span className="font-bold">{item.amountUsed.toFixed(2)} qqs.</span></p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-muted-foreground">Este recibo aún no ha sido utilizado en ninguna orden de trilla.</p>
+                        )}
                     </div>
                 </div>
                  <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
@@ -142,7 +215,86 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
     );
 };
 
+interface InventorySummaryBarProps {
+    receipts: PurchaseReceipt[];
+    activeFilter: string | null;
+    onFilterChange: (filter: string | null) => void;
+}
+
+const InventorySummaryBar: React.FC<InventorySummaryBarProps> = ({ receipts, activeFilter, onFilterChange }) => {
+    const summary = useMemo(() => {
+        const inventoryMap: Record<string, number> = {};
+
+        receipts.forEach(receipt => {
+            if (receipt.status === 'Activo' && receipt.enBodega > 0) {
+                const coffeeType = receipt.tipo === 'Otro' && receipt.customTipo ? receipt.customTipo : receipt.tipo;
+                if (coffeeType) {
+                    inventoryMap[coffeeType] = (inventoryMap[coffeeType] || 0) + receipt.enBodega;
+                }
+            }
+        });
+        
+        return Object.entries(inventoryMap).map(([type, total]) => ({ type, total }));
+
+    }, [receipts]);
+
+    const getTypeColor = (type: string) => {
+        let hash = 0;
+        for (let i = 0; i < type.length; i++) {
+            hash = type.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const colors = [
+            { active: 'bg-blue-600 text-white border-blue-600', inactive: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900' },
+            { active: 'bg-green-600 text-white border-green-600', inactive: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200 dark:bg-green-900/50 dark:text-green-300 dark:border-green-800 dark:hover:bg-green-900' },
+            { active: 'bg-yellow-500 text-black border-yellow-500', inactive: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:border-yellow-800 dark:hover:bg-yellow-900' },
+            { active: 'bg-purple-600 text-white border-purple-600', inactive: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900' },
+            { active: 'bg-pink-600 text-white border-pink-600', inactive: 'bg-pink-100 text-pink-800 border-pink-200 hover:bg-pink-200 dark:bg-pink-900/50 dark:text-pink-300 dark:border-pink-800 dark:hover:bg-pink-900' },
+        ];
+        return colors[Math.abs(hash % colors.length)];
+    };
+
+    if (summary.length === 0) return null;
+
+    return (
+        <div className="my-6">
+            <h3 className="text-md font-semibold text-foreground mb-3">Inventario Actual en Bodega (qqs.)</h3>
+            <div className="flex flex-wrap items-center gap-3">
+                {summary.map((item) => {
+                    const isActive = activeFilter === item.type;
+                    const color = getTypeColor(item.type);
+                    const buttonClass = isActive ? color.active : color.inactive;
+                    return (
+                        <button
+                            key={item.type}
+                            onClick={() => onFilterChange(isActive ? null : item.type)}
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-full border transition-colors ${
+                                isActive ? `${buttonClass} shadow-md` : buttonClass
+                            }`}
+                        >
+                            <span>{item.type}:</span>
+                            <span className="font-bold">{item.total.toFixed(2)}</span>
+                        </button>
+                    );
+                })}
+                {activeFilter && (
+                    <button
+                        onClick={() => onFilterChange(null)}
+                        className="px-4 py-2 text-sm font-medium rounded-full border border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500/20"
+                    >
+                        &times; Mostrar Todos
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+type SortKey = keyof PurchaseReceipt | 'proveedorName' | 'tipoCafe';
+type SortDirection = 'ascending' | 'descending';
+
 const IngresoPage: React.FC = () => {
+    const { roleDetails } = useAuth();
+    const permissions = roleDetails?.permissions.ingreso;
     const [receipts, setReceipts] = useState<PurchaseReceipt[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
@@ -150,6 +302,12 @@ const IngresoPage: React.FC = () => {
     const [receiptToEdit, setReceiptToEdit] = useState<PurchaseReceipt | null>(null);
     const [receiptToVoid, setReceiptToVoid] = useState<PurchaseReceipt | null>(null);
     const [receiptToView, setReceiptToView] = useState<PurchaseReceipt | null>(null);
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection } | null>({ key: 'fecha', direction: 'descending' });
+    const [activeFilter, setActiveFilter] = useState<string | null>(null);
+    const [showOnlyInStock, setShowOnlyInStock] = useState(true);
+
+    const canViewCosts = permissions?.viewCosts === true;
+    const canViewAnalysis = permissions?.viewAnalysis === true;
 
     const fetchData = async () => {
         setLoading(true);
@@ -158,7 +316,7 @@ const IngresoPage: React.FC = () => {
                 api.getCollection<PurchaseReceipt>('purchaseReceipts'),
                 api.getCollection<Supplier>('suppliers')
             ]);
-            setReceipts(receiptsData.sort((a, b) => parseInt(b.recibo) - parseInt(a.recibo)));
+            setReceipts(receiptsData);
             setSuppliers(suppliersData);
         } catch (error) {
             console.error("Error fetching data:", error);
@@ -171,13 +329,57 @@ const IngresoPage: React.FC = () => {
         fetchData();
         const handleDataChange = (event: Event) => {
             const customEvent = event as CustomEvent;
-            if (['purchaseReceipts', 'suppliers'].includes(customEvent.detail.collectionName)) {
+            if (['purchaseReceipts', 'suppliers', 'threshingOrderReceipts'].includes(customEvent.detail.collectionName)) {
                 fetchData();
             }
         };
         addDataChangeListener(handleDataChange);
         return () => removeDataChangeListener(handleDataChange);
     }, []);
+    
+    const getSupplierName = (id: string) => suppliers.find(s => s.id === id)?.name || 'N/A';
+
+    const processedReceipts = useMemo(() => {
+        let sortableItems = receipts.map(r => ({
+            ...r,
+            proveedorName: getSupplierName(r.proveedorId),
+            tipoCafe: r.tipo === 'Otro' ? r.customTipo || '' : r.tipo,
+        }));
+        
+        if (showOnlyInStock) {
+            sortableItems = sortableItems.filter(item => item.enBodega > 0.005);
+        }
+
+        if (activeFilter) {
+            sortableItems = sortableItems.filter(item => item.tipoCafe === activeFilter);
+        }
+
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                const getSortValue = (item: any, key: SortKey) => item[key as keyof typeof item];
+                
+                const aValue = getSortValue(a, sortConfig.key);
+                const bValue = getSortValue(b, sortConfig.key);
+
+                if (aValue === undefined || bValue === undefined) return 0;
+                
+                let comparison = 0;
+                if (sortConfig.key === 'fecha') {
+                    comparison = new Date(aValue).getTime() - new Date(bValue).getTime();
+                } else if (sortConfig.key === 'recibo') {
+                    comparison = parseInt(aValue, 10) - parseInt(bValue, 10);
+                } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+                    comparison = aValue - bValue;
+                } else {
+                    comparison = String(aValue).localeCompare(String(bValue));
+                }
+                
+                return sortConfig.direction === 'ascending' ? comparison : -comparison;
+            });
+        }
+        return sortableItems;
+    }, [receipts, suppliers, sortConfig, activeFilter, showOnlyInStock]);
+
 
     const handleEdit = (receipt: PurchaseReceipt) => {
         setReceiptToEdit(receipt);
@@ -191,8 +393,11 @@ const IngresoPage: React.FC = () => {
     const confirmVoid = async () => {
         if (!receiptToVoid) return;
         try {
-            // FIX: Explicitly specify the generic type for updateDocument to ensure type safety.
-            await api.updateDocument<PurchaseReceipt>('purchaseReceipts', receiptToVoid.id, { status: 'Anulado' });
+            await api.updateDocument<PurchaseReceipt>('purchaseReceipts', receiptToVoid.id, { 
+                status: 'Anulado',
+                enBodega: 0,
+                trillado: 0
+            });
         } catch (error) {
             console.error("Error voiding receipt:", error);
         } finally {
@@ -200,103 +405,128 @@ const IngresoPage: React.FC = () => {
         }
     };
     
-    const handleSaveSuccess = (savedReceipt: PurchaseReceipt) => {
+    const handleSaveSuccess = () => {
         setShowForm(false);
         setReceiptToEdit(null);
-        // Open detail view instead of directly trying to print, which avoids popup blockers
-        setReceiptToView(savedReceipt);
     };
 
-    const generatePdf = (receipt: PurchaseReceipt) => {
+    const handlePrint = (receipt: PurchaseReceipt) => {
         const supplier = suppliers.find(s => s.id === receipt.proveedorId);
-        if(!supplier) {
+        if (!supplier) {
             alert("Proveedor no encontrado, no se puede generar el PDF.");
             return;
         }
-
-        const pdfHtml = ReactDOMServer.renderToString(
-            <ReceiptPDF receipt={receipt} supplier={supplier} />
-        );
-
-        const newWindow = window.open('', '_blank');
-        if (newWindow) {
-            newWindow.document.write(`
-                <html>
-                    <head><title>Recibo ${receipt.recibo}</title></head>
-                    <body>${pdfHtml}</body>
-                </html>
-            `);
-            newWindow.document.close();
-            newWindow.print();
-        }
+        printComponent(<ReceiptPDF receipt={receipt} supplier={supplier} />, `Recibo-${receipt.recibo}`);
     };
 
-    const getSupplierName = (id: string) => suppliers.find(s => s.id === id)?.name || 'N/A';
+    const requestSort = (key: SortKey) => {
+        let direction: SortDirection = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const SortableHeader: React.FC<{ sortKey: SortKey, label: string, className?: string }> = ({ sortKey, label, className }) => {
+        const isSorted = sortConfig?.key === sortKey;
+        const icon = isSorted ? (sortConfig?.direction === 'ascending' ? '▲' : '▼') : '';
+        return (
+            <th className={`px-6 py-3 ${className}`}>
+                <button onClick={() => requestSort(sortKey)} className="flex items-center gap-2 hover:text-foreground transition-colors">
+                    {label}
+                    <span className="text-xs">{icon}</span>
+                </button>
+            </th>
+        );
+    };
+
+    const getRowClass = (receipt: (typeof processedReceipts)[0]) => {
+        if (receipt.status === 'Anulado') {
+            return 'bg-red-500/5 text-muted-foreground opacity-60 line-through cursor-not-allowed';
+        }
+        if (!showOnlyInStock && receipt.enBodega <= 0.005) {
+            return 'bg-gray-500/5 text-muted-foreground opacity-70 hover:bg-muted/50 cursor-pointer';
+        }
+        return 'hover:bg-muted/50 cursor-pointer';
+    };
+
 
     return (
         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-foreground">Ingreso de Café</h2>
-                <button 
-                    onClick={() => { setReceiptToEdit(null); setShowForm(true); }} 
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
-                    <PlusIcon className="w-4 h-4" /> Crear Recibo
-                </button>
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                        <ToggleSwitch id="showOnlyInStock" checked={showOnlyInStock} onChange={setShowOnlyInStock} />
+                        <label htmlFor="showOnlyInStock" className="text-sm font-medium text-muted-foreground select-none">Mostrar solo con inventario</label>
+                    </div>
+                    {permissions?.add && <button 
+                        onClick={() => { setReceiptToEdit(null); setShowForm(true); }} 
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                        <PlusIcon className="w-4 h-4" /> Crear Recibo
+                    </button>}
+                </div>
             </div>
-            <div className="overflow-x-auto">
+
+            <InventorySummaryBar receipts={receipts} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+
+            <div className="overflow-x-auto mt-6">
                 <table className="w-full text-sm text-left text-muted-foreground">
-                    <thead className="text-xs uppercase bg-muted">
+                    <thead className="text-xs uppercase bg-muted whitespace-nowrap">
                         <tr>
-                            <th className="px-6 py-3">Recibo</th>
-                            <th className="px-6 py-3">Fecha</th>
-                            <th className="px-6 py-3">Proveedor</th>
+                            <SortableHeader sortKey="fecha" label="Fecha" />
+                            <SortableHeader sortKey="recibo" label="Recibo" />
+                            <SortableHeader sortKey="proveedorName" label="Proveedor" />
+                            <SortableHeader sortKey="tipoCafe" label="Tipo de Café" />
                             <th className="px-6 py-3 text-right">Peso Neto</th>
-                            <th className="px-6 py-3 text-right">Total Compra</th>
+                            <th className="px-6 py-3 text-right">Trillado</th>
+                            <th className="px-6 py-3 text-right">En Bodega</th>
                             <th className="px-6 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={6} className="text-center py-10">Cargando recibos...</td></tr>
-                        ) : receipts.length > 0 ? (
-                            receipts.map((receipt) => (
+                            <tr><td colSpan={8} className="text-center py-10">Cargando recibos...</td></tr>
+                        ) : processedReceipts.length > 0 ? (
+                            processedReceipts.map((receipt) => (
                                 <tr key={receipt.id} 
-                                    className={`border-b border-border transition-colors ${receipt.status === 'Anulado' ? 'bg-red-500/5 text-muted-foreground line-through' : 'hover:bg-muted/50 cursor-pointer'}`} 
-                                    onClick={() => setReceiptToView(receipt)}>
-                                    <td className="px-6 py-4 font-medium text-foreground">{receipt.recibo}</td>
+                                    className={`border-b border-border transition-colors ${getRowClass(receipt)}`} 
+                                    onClick={() => receipt.status !== 'Anulado' && setReceiptToView(receipt)}>
                                     <td className="px-6 py-4">{formatDate(receipt.fecha)}</td>
-                                    <td className="px-6 py-4">{getSupplierName(receipt.proveedorId)}</td>
+                                    <td className="px-6 py-4 font-medium text-foreground">{receipt.recibo}</td>
+                                    <td className="px-6 py-4">{receipt.proveedorName}</td>
+                                    <td className="px-6 py-4">{receipt.tipoCafe}</td>
                                     <td className="px-6 py-4 text-right">{receipt.pesoNeto.toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-right font-semibold">Q{receipt.totalCompra.toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right">{receipt.trillado.toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{receipt.enBodega.toFixed(2)}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
                                             <button 
                                                 className="text-blue-500 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed" 
-                                                onClick={(e) => { e.stopPropagation(); generatePdf(receipt); }}
-                                                disabled={receipt.status === 'Anulado'}
-                                                title="Ver PDF">
+                                                onClick={(e) => { e.stopPropagation(); setReceiptToView(receipt); }}
+                                                title="Ver Detalle">
                                                 <EyeIcon className="w-5 h-5" />
                                             </button>
-                                            <button 
+                                            {permissions?.edit && <button 
                                                 className="text-yellow-500 hover:text-yellow-700 disabled:text-gray-400 disabled:cursor-not-allowed" 
                                                 onClick={(e) => { e.stopPropagation(); handleEdit(receipt); }}
                                                 disabled={receipt.status === 'Anulado'}
                                                 title="Editar Recibo">
                                                 <PencilIcon className="w-4 h-4" />
-                                            </button>
-                                            <button 
+                                            </button>}
+                                            {permissions?.delete && <button 
                                                 className="text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed" 
                                                 onClick={(e) => { e.stopPropagation(); handleVoidClick(receipt); }}
-                                                disabled={receipt.status === 'Anulado'}
-                                                title={receipt.status === 'Anulado' ? 'Recibo ya anulado' : 'Anular recibo'}>
+                                                disabled={receipt.status === 'Anulado' || receipt.trillado > 0}
+                                                title={receipt.status === 'Anulado' ? 'Recibo ya anulado' : (receipt.trillado > 0 ? 'No se puede anular, ya fue trillado' : 'Anular recibo')}>
                                                 <TrashIcon className="w-4 h-4" />
-                                            </button>
+                                            </button>}
                                         </div>
                                     </td>
                                 </tr>
                             ))
                         ) : (
-                             <tr><td colSpan={6} className="text-center py-10">No hay recibos para mostrar. ¡Crea el primero!</td></tr>
+                             <tr><td colSpan={8} className="text-center py-10">{activeFilter ? 'No hay recibos que coincidan con el filtro.' : (showOnlyInStock ? 'No hay inventario en bodega.' : 'No hay recibos para mostrar.')}</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -316,7 +546,9 @@ const IngresoPage: React.FC = () => {
                     receipt={receiptToView}
                     supplier={suppliers.find(s => s.id === receiptToView.proveedorId)}
                     onClose={() => setReceiptToView(null)}
-                    onGeneratePdf={generatePdf}
+                    onGeneratePdf={handlePrint}
+                    canViewCosts={canViewCosts}
+                    canViewAnalysis={canViewAnalysis}
                 />
             )}
 
