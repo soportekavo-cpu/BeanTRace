@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { ThreshingOrder, PurchaseReceipt, ThreshingOrderReceipt, Client } from '../types';
+import { ThreshingOrder, PurchaseReceipt, ThreshingOrderReceipt, Client, Mezcla, Rendimiento, Reproceso, Viñeta } from '../types';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
@@ -50,7 +50,7 @@ const VentasLocalesPage: React.FC = () => {
         fetchData();
         const handleDataChange = (event: Event) => {
             const customEvent = event as CustomEvent;
-            if (['threshingOrders', 'clients', 'threshingOrderReceipts', 'purchaseReceipts'].includes(customEvent.detail.collectionName)) {
+            if (['threshingOrders', 'clients', 'threshingOrderReceipts', 'purchaseReceipts', 'rendimientos', 'reprocesos', 'mezclas'].includes(customEvent.detail.collectionName)) {
                 fetchData();
             }
         };
@@ -78,24 +78,67 @@ const VentasLocalesPage: React.FC = () => {
         if (!orderToDelete) return;
         try {
             const orderReceiptsToDelete = await api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts', or => or.threshingOrderId === orderToDelete.id);
-            const receiptIdsToUpdate = [...new Set(orderReceiptsToDelete.map(or => or.receiptId))];
+            
+            const allReceipts = await api.getCollection<PurchaseReceipt>('purchaseReceipts');
+            const allMezclas = await api.getCollection<Mezcla>('mezclas');
+            const allRendimientos = await api.getCollection<Rendimiento>('rendimientos');
+            const allReprocesos = await api.getCollection<Reproceso>('reprocesos');
+    
+            const inventoryUpdatePromises: Promise<any>[] = [];
+    
+            for (const or of orderReceiptsToDelete) {
+                switch (or.inputType) {
+                    case 'Recibo': {
+                        const receipt = allReceipts.find(r => r.id === or.receiptId);
+                        if (receipt) {
+                            inventoryUpdatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', receipt.id, {
+                                trillado: receipt.trillado - or.amountToThresh,
+                                enBodega: receipt.enBodega + or.amountToThresh,
+                            }));
+                        }
+                        break;
+                    }
+                    case 'Mezcla': {
+                        const mezcla = allMezclas.find(m => m.id === or.receiptId);
+                        if (mezcla) {
+                            inventoryUpdatePromises.push(api.updateDocument<Mezcla>('mezclas', mezcla.id, {
+                                cantidadDespachada: mezcla.cantidadDespachada - or.amountToThresh,
+                                sobranteEnBodega: mezcla.sobranteEnBodega + or.amountToThresh,
+                            }));
+                        }
+                        break;
+                    }
+                    case 'Viñeta': {
+                        const findAndRevertVignette = (parentDocs: (Rendimiento | Reproceso)[], vignetteArrayKey: 'vignettes' | 'outputVignettes', collectionName: 'rendimientos' | 'reprocesos') => {
+                            for (const doc of parentDocs) {
+                                const vignetteIndex = (doc[vignetteArrayKey] as Viñeta[]).findIndex(v => v.id === or.receiptId);
+                                if (vignetteIndex > -1) {
+                                    const updatedDoc = { ...doc };
+                                    const vignette = { ...updatedDoc[vignetteArrayKey][vignetteIndex] };
+                                    
+                                    vignette.pesoNeto += or.amountToThresh;
+                                    vignette.status = Math.abs(vignette.pesoNeto - vignette.originalPesoNeto) < 0.005 ? 'En Bodega' : 'Mezclada Parcialmente';
 
-            // First, delete the order and its associated receipts
+                                    updatedDoc[vignetteArrayKey][vignetteIndex] = vignette;
+                                    inventoryUpdatePromises.push(api.updateDocument(collectionName, doc.id, { [vignetteArrayKey]: updatedDoc[vignetteArrayKey] }));
+                                    return true;
+                                }
+                            }
+                            return false;
+                        };
+                        
+                        if (!findAndRevertVignette(allRendimientos, 'vignettes', 'rendimientos')) {
+                            findAndRevertVignette(allReprocesos, 'outputVignettes', 'reprocesos');
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            await Promise.all(inventoryUpdatePromises);
             const deleteReceiptPromises = orderReceiptsToDelete.map(or => api.deleteDocument('threshingOrderReceipts', or.id!));
             await Promise.all(deleteReceiptPromises);
             await api.deleteDocument('threshingOrders', orderToDelete.id!);
-
-            // Then, recalculate inventory for each affected purchase receipt
-            const inventoryUpdatePromises = receiptIdsToUpdate.map(async (receiptId) => {
-                const receipt = await api.getCollection<PurchaseReceipt>('purchaseReceipts', r => r.id === receiptId).then(res => res[0]);
-                if (receipt) {
-                    const remainingOrderReceipts = await api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts', or => or.receiptId === receiptId);
-                    const newTrillado = remainingOrderReceipts.reduce((sum, or) => sum + or.amountToThresh, 0);
-                    const newEnBodega = receipt.pesoNeto - newTrillado;
-                    await api.updateDocument<PurchaseReceipt>('purchaseReceipts', receipt.id, { trillado: newTrillado, enBodega: newEnBodega });
-                }
-            });
-            await Promise.all(inventoryUpdatePromises);
 
         } catch (error) {
             console.error("Error deleting threshing order and reverting inventory:", error);
@@ -205,7 +248,7 @@ const VentasLocalesPage: React.FC = () => {
                     <div className="bg-card p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
                         <h3 className="text-lg font-bold text-foreground">Confirmar Anulación</h3>
                         <p className="text-muted-foreground mt-2 text-sm">
-                            ¿Estás seguro de anular la orden <strong>{orderToDelete.orderNumber}</strong>? El inventario de los recibos utilizados será revertido.
+                            ¿Estás seguro de anular la orden <strong>{orderToDelete.orderNumber}</strong>? El inventario de los insumos utilizados será revertido.
                         </p>
                         <div className="mt-6 flex justify-end gap-4">
                             <button onClick={() => setOrderToDelete(null)} className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">

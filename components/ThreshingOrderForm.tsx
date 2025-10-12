@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt } from '../types';
+import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import CheckIcon from './icons/CheckIcon';
@@ -15,29 +15,47 @@ interface ThreshingOrderFormProps {
     onSaveSuccess: () => void;
 }
 
+interface InputRow {
+    id: string; // temp id for react key
+    inputType: 'Recibo' | 'Viñeta' | 'Mezcla';
+    sourceId: string;
+    amountToThresh: number;
+    projectedPrimerasPercent?: number;
+    projectedCataduraPercent?: number;
+}
+
+
 const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contractLots, allThreshingOrders, onCancel, onSaveSuccess }) => {
     const [selectedLotIds, setSelectedLotIds] = useState<Set<string>>(new Set());
     const [availableReceipts, setAvailableReceipts] = useState<PurchaseReceipt[]>([]);
+    const [availableVignettes, setAvailableVignettes] = useState<Viñeta[]>([]);
+    const [availableMezclas, setAvailableMezclas] = useState<Mezcla[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     
-    type ReceiptRow = {
-        id: string; // temp id for react key
-        receiptId: string;
-        amountToThresh: number;
-    };
-    const [receiptRows, setReceiptRows] = useState<ReceiptRow[]>([]);
+    const [inputRows, setInputRows] = useState<InputRow[]>([{ id: `row_${Date.now()}`, inputType: 'Recibo', sourceId: '', amountToThresh: 0 }]);
     
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const [receiptsData, suppliersData] = await Promise.all([
+                const [receiptsData, suppliersData, rendimientosData, reprocesosData, mezclasData] = await Promise.all([
                     api.getCollection<PurchaseReceipt>('purchaseReceipts', r => r.enBodega > 0 && r.status === 'Activo' && r.gMuestra > 0),
                     api.getCollection<Supplier>('suppliers'),
+                    api.getCollection<Rendimiento>('rendimientos'),
+                    api.getCollection<Reproceso>('reprocesos'),
+                    api.getCollection<Mezcla>('mezclas', m => m.sobranteEnBodega > 0.005),
                 ]);
+                
+                const allVignettes = [
+                    ...rendimientosData.flatMap(r => r.vignettes),
+                    ...reprocesosData.flatMap(r => r.outputVignettes)
+                ];
+
                 setAvailableReceipts(receiptsData);
+                setAvailableVignettes(allVignettes.filter(v => (v.status === 'En Bodega' || v.status === 'Mezclada Parcialmente') && v.pesoNeto > 0.005));
+                setAvailableMezclas(mezclasData);
                 setSuppliers(suppliersData);
             } catch (error) {
                 console.error("Error fetching data for threshing form:", error);
@@ -65,28 +83,49 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
         });
     };
     
-    const handleAddReceiptRow = () => {
-        setReceiptRows(prev => [...prev, { id: `row_${Date.now()}`, receiptId: '', amountToThresh: 0 }]);
+    const addInputRow = () => {
+        setInputRows(prev => [...prev, { id: `row_${Date.now()}`, inputType: 'Recibo', sourceId: '', amountToThresh: 0 }]);
     };
 
-    const handleRemoveReceiptRow = (rowId: string) => {
-        setReceiptRows(prev => prev.filter(row => row.id !== rowId));
+    const removeInputRow = (rowId: string) => {
+        setInputRows(prev => prev.filter(row => row.id !== rowId));
     };
 
-    const handleRowChange = (rowId: string, field: 'receiptId' | 'amountToThresh', value: string) => {
-        setReceiptRows(prev => prev.map(row => {
+    const handleRowChange = (rowId: string, field: keyof InputRow, value: string | number) => {
+        setInputRows(prev => prev.map(row => {
             if (row.id !== rowId) return row;
-            if (field === 'receiptId') {
-                 const selectedReceipt = availableReceipts.find(r => r.id === value);
-                 return { ...row, receiptId: value, amountToThresh: selectedReceipt?.enBodega || 0 };
+            
+            let updatedRow = { ...row, [field]: value };
+    
+            if (field === 'inputType') {
+                updatedRow.sourceId = '';
+                updatedRow.amountToThresh = 0;
+                delete updatedRow.projectedPrimerasPercent;
+                delete updatedRow.projectedCataduraPercent;
+            } else if (field === 'sourceId') {
+                let maxAmount = 0;
+                if(updatedRow.inputType === 'Recibo') maxAmount = availableReceipts.find(r => r.id === value)?.enBodega || 0;
+                if(updatedRow.inputType === 'Viñeta') maxAmount = availableVignettes.find(v => v.id === value)?.pesoNeto || 0;
+                if(updatedRow.inputType === 'Mezcla') maxAmount = availableMezclas.find(m => m.id === value)?.sobranteEnBodega || 0;
+                updatedRow.amountToThresh = maxAmount;
+            } else if (field === 'amountToThresh') {
+                 let maxAmount = 0;
+                if(row.inputType === 'Recibo') maxAmount = availableReceipts.find(r => r.id === row.sourceId)?.enBodega || 0;
+                if(row.inputType === 'Viñeta') maxAmount = availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto || 0;
+                if(row.inputType === 'Mezcla') maxAmount = availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega || 0;
+
+                if (Number(value) > maxAmount) {
+                    updatedRow[field] = maxAmount;
+                }
             }
-            return { ...row, [field]: parseFloat(value) || 0 };
+    
+            return updatedRow;
         }));
     };
     
-    const selectedReceiptIdsInForm = useMemo(() => 
-        new Set(receiptRows.map(r => r.receiptId)), 
-    [receiptRows]);
+    const usedSourceIds = useMemo(() => 
+        new Set(inputRows.map(r => r.sourceId)), 
+    [inputRows]);
 
     const calculations = useMemo(() => {
         const neededPrimeras = Array.from(selectedLotIds).reduce((sum: number, lotId) => {
@@ -98,42 +137,52 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
         let totalPrimeras = 0;
         let totalCatadura = 0;
         
-        const detailedRows = receiptRows.map(row => {
-            const receipt = availableReceipts.find(r => r.id === row.receiptId);
-            if (!receipt) return null;
+        const detailedRows = inputRows.map(row => {
+            let primeras = 0;
+            let catadura = 0;
+            let sourceInfo: any = { supplierName: 'N/A', coffeeType: 'N/A' };
+            const amount = Number(row.amountToThresh) || 0;
+
+            if (row.inputType === 'Recibo') {
+                const receipt = availableReceipts.find(r => r.id === row.sourceId);
+                if (receipt) {
+                    primeras = amount * ((Number(receipt.rendimientoPrimera) || 0) / 100);
+                    catadura = amount * ((Number(receipt.rendimientoRechazo) || 0) / 100);
+                    sourceInfo = {
+                        supplierName: suppliers.find(s => s.id === receipt.proveedorId)?.name || 'N/A',
+                        coffeeType: receipt.tipo === 'Otro' ? receipt.customTipo : receipt.tipo
+                    };
+                }
+            } else {
+                const primPercent = Number(row.projectedPrimerasPercent) || 0;
+                const cataPercent = Number(row.projectedCataduraPercent) || 0;
+                primeras = amount * (primPercent / 100);
+                catadura = amount * (cataPercent / 100);
+
+                if (row.inputType === 'Viñeta') {
+                    const vignette = availableVignettes.find(v => v.id === row.sourceId);
+                    if (vignette) sourceInfo = { coffeeType: vignette.tipo };
+                } else if (row.inputType === 'Mezcla') {
+                    const mezcla = availableMezclas.find(m => m.id === row.sourceId);
+                    if (mezcla) sourceInfo = { coffeeType: mezcla.tipoMezcla };
+                }
+            }
             
-            const amountToThreshNum = Number(row.amountToThresh) || 0;
-            // FIX: Ensure arithmetic operations are performed on numbers by casting potentially non-numeric values.
-            const primeras = amountToThreshNum * ((Number(receipt.rendimientoPrimera) || 0) / 100);
-            const catadura = amountToThreshNum * ((Number(receipt.rendimientoRechazo) || 0) / 100);
-            
-            totalToThresh += amountToThreshNum;
+            totalToThresh += amount;
             totalPrimeras += primeras;
             totalCatadura += catadura;
 
-            return {
-                ...row,
-                supplierName: suppliers.find(s => s.id === receipt.proveedorId)?.name || 'N/A',
-                coffeeType: receipt.tipo === 'Otro' ? receipt.customTipo : receipt.tipo,
-                primeras,
-                catadura,
-                total: primeras + catadura,
-                receipt,
-            };
-        }).filter((row): row is NonNullable<typeof row> => row !== null);
+            return { ...row, primeras, catadura, ...sourceInfo };
+        });
 
         const difference = totalPrimeras - neededPrimeras;
         
         return { neededPrimeras, totalToThresh, totalPrimeras, totalCatadura, difference, detailedRows };
-    }, [selectedLotIds, receiptRows, availableReceipts, contractLots, suppliers]);
+    }, [selectedLotIds, inputRows, availableReceipts, availableVignettes, availableMezclas, contractLots, suppliers]);
 
     const handleSave = async () => {
-        if (selectedLotIds.size === 0) {
-            alert('Por favor, selecciona al menos una partida.');
-            return;
-        }
-        if (receiptRows.some(row => !row.receiptId || row.amountToThresh <= 0)) {
-            alert('Por favor, completa la información de todos los recibos añadidos.');
+        if (selectedLotIds.size === 0 || inputRows.some(row => !row.sourceId || row.amountToThresh <= 0)) {
+            alert('Por favor, completa toda la información requerida.');
             return;
         }
 
@@ -141,70 +190,84 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
         try {
             const allOrders = await api.getCollection<ThreshingOrder>('threshingOrders');
             const exportOrders = allOrders.filter(o => o.orderNumber.startsWith('OTEX-'));
-            const maxNum = exportOrders.reduce((max, o) => {
-                const num = parseInt(o.orderNumber.split('-')[1]);
-                return isNaN(num) ? max : Math.max(max, num);
-            }, 0);
+            const maxNum = exportOrders.reduce((max, o) => Math.max(max, parseInt(o.orderNumber.split('-')[1]) || 0), 0);
             const orderNumber = `OTEX-${maxNum + 1}`;
 
             const newOrderData: Omit<ThreshingOrder, 'id'> = {
-                contractId: contract.id,
-                orderNumber,
-                creationDate: new Date().toISOString().split('T')[0],
-                lotIds: Array.from(selectedLotIds),
-                notes: '',
-                totalToThresh: calculations.totalToThresh,
-                totalPrimeras: calculations.totalPrimeras,
-                totalCatadura: calculations.totalCatadura,
-                orderType: 'Exportación',
+                contractId: contract.id, orderNumber, creationDate: new Date().toISOString().split('T')[0], lotIds: Array.from(selectedLotIds), notes: '', totalToThresh: calculations.totalToThresh, totalPrimeras: calculations.totalPrimeras, totalCatadura: calculations.totalCatadura, orderType: 'Exportación',
             };
-            
             const newOrder = await api.addDocument<ThreshingOrder>('threshingOrders', newOrderData);
 
             const orderReceiptsForPdf: ThreshingOrderReceipt[] = [];
+            const inventoryUpdatePromises: Promise<any>[] = [];
 
-            const orderReceiptPromises = calculations.detailedRows.map(async (row) => {
+            const allRendimientos = await api.getCollection<Rendimiento>('rendimientos');
+            const allReprocesos = await api.getCollection<Reproceso>('reprocesos');
+
+            for (const row of calculations.detailedRows) {
+                let sourceNumber = '';
+                if (row.inputType === 'Recibo') sourceNumber = availableReceipts.find(s => s.id === row.sourceId)?.recibo || '';
+                if (row.inputType === 'Viñeta') sourceNumber = availableVignettes.find(s => s.id === row.sourceId)?.numeroViñeta || '';
+                if (row.inputType === 'Mezcla') sourceNumber = availableMezclas.find(s => s.id === row.sourceId)?.mezclaNumber || '';
+
                 const orderReceipt: Omit<ThreshingOrderReceipt, 'id'> = {
-                    threshingOrderId: newOrder.id,
-                    receiptId: row.receipt.id,
-                    receiptNumber: row.receipt.recibo,
-                    supplierName: row.supplierName,
-                    coffeeType: row.coffeeType!,
-                    amountToThresh: row.amountToThresh,
-                    primeras: row.primeras,
-                    catadura: row.catadura,
+                    threshingOrderId: newOrder.id, receiptId: row.sourceId, receiptNumber: sourceNumber, inputType: row.inputType, supplierName: row.supplierName, coffeeType: row.coffeeType, amountToThresh: Number(row.amountToThresh), primeras: row.primeras, catadura: row.catadura, projectedPrimerasPercent: row.projectedPrimerasPercent ? Number(row.projectedPrimerasPercent) : undefined, projectedCataduraPercent: row.projectedCataduraPercent ? Number(row.projectedCataduraPercent) : undefined
                 };
                 const savedOrderReceipt = await api.addDocument<ThreshingOrderReceipt>('threshingOrderReceipts', orderReceipt);
                 orderReceiptsForPdf.push(savedOrderReceipt);
-            });
-            await Promise.all(orderReceiptPromises);
 
-            const allAffectedReceiptIds = [...new Set(calculations.detailedRows.map(r => r.receipt.id))];
-            const inventoryUpdatePromises = allAffectedReceiptIds.map(async (receiptId) => {
-                const receipt = availableReceipts.find(r => r.id === receiptId);
-                if (!receipt) return;
-                
-                const allOrderReceiptsForThisPurchase = await api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts', or => or.receiptId === receiptId);
-                const newTotalTrillado = allOrderReceiptsForThisPurchase.reduce((sum, or) => sum + or.amountToThresh, 0);
-                const newEnBodega = receipt.pesoNeto - newTotalTrillado;
+                if (row.inputType === 'Recibo') {
+                    const receipt = availableReceipts.find(r => r.id === row.sourceId);
+                    if (receipt) {
+                        inventoryUpdatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', receipt.id, {
+                            trillado: (Number(receipt.trillado) || 0) + (Number(row.amountToThresh) || 0),
+                            enBodega: (Number(receipt.enBodega) || 0) - (Number(row.amountToThresh) || 0),
+                        }));
+                    }
+                } else if (row.inputType === 'Mezcla') {
+                    const mezcla = availableMezclas.find(m => m.id === row.sourceId);
+                    if (mezcla) {
+                        inventoryUpdatePromises.push(api.updateDocument<Mezcla>('mezclas', mezcla.id, {
+                            cantidadDespachada: (Number(mezcla.cantidadDespachada) || 0) + (Number(row.amountToThresh) || 0),
+                            sobranteEnBodega: (Number(mezcla.sobranteEnBodega) || 0) - (Number(row.amountToThresh) || 0),
+                        }));
+                    }
+                } else if (row.inputType === 'Viñeta') {
+                    let parentDoc: Rendimiento | Reproceso | undefined;
+                    let collectionName: 'rendimientos' | 'reprocesos' | undefined;
+                    let vignetteArrayKey: 'vignettes' | 'outputVignettes' | undefined;
 
-                await api.updateDocument<PurchaseReceipt>('purchaseReceipts', receipt.id, {
-                    trillado: newTotalTrillado,
-                    enBodega: newEnBodega,
-                });
-            });
+                    parentDoc = allRendimientos.find(r => r.vignettes.some(v => v.id === row.sourceId));
+                    if(parentDoc) { collectionName = 'rendimientos'; vignetteArrayKey = 'vignettes'; }
+                    else {
+                        parentDoc = allReprocesos.find(r => r.outputVignettes.some(v => v.id === row.sourceId));
+                        if(parentDoc) { collectionName = 'reprocesos'; vignetteArrayKey = 'outputVignettes'; }
+                    }
+
+                    if (parentDoc && collectionName && vignetteArrayKey) {
+                        const updatedVignettes = (parentDoc[vignetteArrayKey] as Viñeta[]).map(v => {
+                            if (v.id === row.sourceId) {
+                                const newPeso = v.pesoNeto - Number(row.amountToThresh);
+                                const newStatus: Viñeta['status'] = newPeso > 0.005 ? 'Mezclada Parcialmente' : 'Utilizada en Trilla';
+                                return { ...v, pesoNeto: newPeso, status: newStatus };
+                            }
+                            return v;
+                        });
+                        inventoryUpdatePromises.push(api.updateDocument(collectionName, parentDoc.id, { [vignetteArrayKey]: updatedVignettes }));
+                    }
+                }
+            }
             await Promise.all(inventoryUpdatePromises);
             
             printComponent(
                 <ThreshingOrderPDF order={newOrder} receipts={orderReceiptsForPdf} contract={contract} lots={contractLots} />,
                 `Orden-Trilla-${newOrder.orderNumber}`
             );
-
             onSaveSuccess();
 
         } catch (error) {
             console.error("Error saving threshing order:", error);
-            alert("Hubo un error al guardar la orden. Revisa la consola para más detalles.");
+            alert("Hubo un error al guardar la orden.");
         } finally {
             setIsSaving(false);
         }
@@ -246,59 +309,57 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
 
             {selectedLotIds.size > 0 && (
                 <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                     <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Paso 2: Asignar Recibos de Café</h3>
+                     <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Paso 2: Asignar Insumos para la Trilla</h3>
                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="text-left text-muted-foreground"><tr>
-                                <th className="p-2 w-[25%]">Recibo</th>
-                                <th className="p-2 w-[20%]">Proveedor</th>
-                                <th className="p-2 w-[10%]">Tipo</th>
-                                <th className="p-2 w-[10%] text-right">A Trillar</th>
-                                <th className="p-2 w-[10%] text-right">Primeras</th>
-                                <th className="p-2 w-[10%] text-right">Catadura</th>
+                            <thead className="text-left text-muted-foreground whitespace-nowrap"><tr>
+                                <th className="p-2 w-[12%]">Tipo Insumo</th>
+                                <th className="p-2 w-[20%]">Fuente</th>
+                                <th className="p-2 w-[15%]">Proveedor</th>
+                                <th className="p-2 w-[12%]">Tipo Café</th>
+                                <th className="p-2 text-right w-[10%]">A Trillar</th>
+                                <th className="p-2 text-center" colSpan={2}>Proyección</th>
+                                <th className="p-2 text-right w-[8%]">Primeras</th>
+                                <th className="p-2 text-right w-[8%]">Catadura</th>
                                 <th className="p-2 w-[5%]"></th>
                             </tr></thead>
                             <tbody>
-                                {receiptRows.map(row => {
-                                    const detailedRow = calculations.detailedRows.find(dr => dr.id === row.id);
-                                    const selectedReceipt = availableReceipts.find(r => r.id === row.receiptId);
+                                {calculations.detailedRows.map((row) => {
+                                    let maxAmount = 0;
+                                    if(row.inputType === 'Recibo') maxAmount = availableReceipts.find(r => r.id === row.sourceId)?.enBodega || 0;
+                                    if(row.inputType === 'Viñeta') maxAmount = availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto || 0;
+                                    if(row.inputType === 'Mezcla') maxAmount = availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega || 0;
                                     return (
                                         <tr key={row.id} className="border-b">
+                                            <td className="p-2 align-top"><select value={row.inputType} onChange={e => handleRowChange(row.id, 'inputType', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input"><option value="Recibo">Recibo</option><option value="Viñeta">Viñeta</option><option value="Mezcla">Mezcla</option></select></td>
                                             <td className="p-2 align-top">
-                                                <select value={row.receiptId} onChange={e => handleRowChange(row.id, 'receiptId', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input">
-                                                    <option value="" disabled>Seleccionar recibo</option>
-                                                    {availableReceipts
-                                                        .filter(r => !selectedReceiptIdsInForm.has(r.id!) || r.id === row.receiptId)
-                                                        .map(r => <option key={r.id} value={r.id}>Recibo {r.recibo} ({r.enBodega.toFixed(2)} en bodega)</option>)}
+                                                <select value={row.sourceId} onChange={e => handleRowChange(row.id, 'sourceId', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input">
+                                                    <option value="" disabled>Seleccionar...</option>
+                                                    {row.inputType === 'Recibo' && availableReceipts.filter(r => !usedSourceIds.has(r.id!) || r.id === row.sourceId).map(r => <option key={r.id} value={r.id}>{`${r.recibo} (${(Number(r.enBodega) || 0).toFixed(2)} qqs.)`}</option>)}
+                                                    {row.inputType === 'Viñeta' && availableVignettes.filter(v => !usedSourceIds.has(v.id!) || v.id === row.sourceId).map(v => <option key={v.id} value={v.id}>{`${v.numeroViñeta} (${v.pesoNeto.toFixed(2)} qqs.)`}</option>)}
+                                                    {row.inputType === 'Mezcla' && availableMezclas.filter(m => !usedSourceIds.has(m.id!) || m.id === row.sourceId).map(m => <option key={m.id} value={m.id}>{`${m.mezclaNumber} (${m.sobranteEnBodega.toFixed(2)} qqs.)`}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="p-2 align-top">{detailedRow?.supplierName || '...'}</td>
-                                            <td className="p-2 align-top">{detailedRow?.coffeeType || '...'}</td>
-                                            <td className="p-2 align-top">
-                                                <input 
-                                                    type="number" 
-                                                    value={row.amountToThresh} 
-                                                    onChange={e => handleRowChange(row.id, 'amountToThresh', e.target.value)} 
-                                                    max={selectedReceipt?.enBodega}
-                                                    disabled={!row.receiptId}
-                                                    className="w-full p-2 border rounded-md bg-background border-input text-right disabled:bg-muted disabled:cursor-not-allowed" 
-                                                />
-                                            </td>
-                                            <td className="p-2 align-top text-right font-medium">{detailedRow ? detailedRow.primeras.toFixed(2) : '0.00'}</td>
-                                            <td className="p-2 align-top text-right font-medium">{detailedRow ? detailedRow.catadura.toFixed(2) : '0.00'}</td>
-                                            <td className="p-2 align-top">
-                                                <button onClick={() => handleRemoveReceiptRow(row.id)} className="text-red-500 hover:text-red-700">
-                                                    <TrashIcon className="w-4 h-4"/>
-                                                </button>
-                                            </td>
+                                            <td className="p-2 align-top text-xs">{row.supplierName}</td>
+                                            <td className="p-2 align-top text-xs">{row.coffeeType}</td>
+                                            <td className="p-2 align-top"><input type="number" value={row.amountToThresh} onChange={e => handleRowChange(row.id, 'amountToThresh', e.target.value)} max={maxAmount} disabled={!row.sourceId} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                            {row.inputType !== 'Recibo' ? (
+                                                <>
+                                                    <td className="p-2 align-top"><input type="number" placeholder="% 1ras" value={row.projectedPrimerasPercent || ''} onChange={e => handleRowChange(row.id, 'projectedPrimerasPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                                    <td className="p-2 align-top"><input type="number" placeholder="% Cata." value={row.projectedCataduraPercent || ''} onChange={e => handleRowChange(row.id, 'projectedCataduraPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                                </>
+                                            ) : <td colSpan={2} className="p-2 text-center text-muted-foreground text-xs align-middle">Automático</td>}
+                                            <td className="p-2 align-top text-right font-medium">{row.primeras.toFixed(2)}</td>
+                                            <td className="p-2 align-top text-right font-medium">{row.catadura.toFixed(2)}</td>
+                                            <td className="p-2 align-top"><button onClick={() => removeInputRow(row.id)} className="text-red-500 hover:text-red-700"><TrashIcon className="w-4 h-4"/></button></td>
                                         </tr>
                                     );
                                 })}
                             </tbody>
                         </table>
                      </div>
-                      <button onClick={handleAddReceiptRow} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md">
-                        <PlusIcon className="w-4 h-4" /> Añadir Recibo
+                      <button onClick={addInputRow} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md">
+                        <PlusIcon className="w-4 h-4" /> Añadir Insumo
                     </button>
                 </div>
             )}

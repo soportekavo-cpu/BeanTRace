@@ -72,13 +72,14 @@ const ThreshingOrderDetailModalLocal: React.FC<ThreshingOrderDetailModalLocalPro
                     </div>
 
                     <div>
-                        <h4 className="text-lg font-semibold text-purple-600 mb-3">Recibos Utilizados</h4>
+                        <h4 className="text-lg font-semibold text-purple-600 mb-3">Insumos Utilizados</h4>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-muted-foreground">
                                 <thead className="text-xs uppercase bg-muted">
                                     <tr>
-                                        <th className="px-4 py-2">Recibo</th>
-                                        <th className="px-4 py-2">Proveedor</th>
+                                        <th className="px-4 py-2">Tipo</th>
+                                        <th className="px-4 py-2">No.</th>
+                                        <th className="px-4 py-2">Origen/Proveedor</th>
                                         <th className="px-4 py-2 text-right">A Trillar</th>
                                         <th className="px-4 py-2 text-right">Primeras</th>
                                         <th className="px-4 py-2 text-right">Catadura</th>
@@ -86,11 +87,12 @@ const ThreshingOrderDetailModalLocal: React.FC<ThreshingOrderDetailModalLocalPro
                                 </thead>
                                 <tbody>
                                     {loading ? (
-                                        <tr><td colSpan={5} className="text-center py-6">Cargando recibos...</td></tr>
+                                        <tr><td colSpan={6} className="text-center py-6">Cargando insumos...</td></tr>
                                     ) : receipts.map(r => (
                                         <tr key={r.id} className="border-b border-border">
+                                            <td className="px-4 py-3 font-semibold">{r.inputType}</td>
                                             <td className="px-4 py-3 font-semibold text-green-600">{r.receiptNumber}</td>
-                                            <td className="px-4 py-3">{r.supplierName}</td>
+                                            <td className="px-4 py-3">{r.supplierName || 'N/A'}</td>
                                             <td className="px-4 py-3 text-right">{r.amountToThresh.toFixed(2)}</td>
                                             <td className="px-4 py-3 text-right">{r.primeras.toFixed(2)}</td>
                                             <td className="px-4 py-3 text-right">{r.catadura.toFixed(2)}</td>
@@ -99,7 +101,7 @@ const ThreshingOrderDetailModalLocal: React.FC<ThreshingOrderDetailModalLocalPro
                                 </tbody>
                                 <tfoot className="font-bold text-foreground bg-muted/50">
                                     <tr>
-                                        <td colSpan={2} className="px-4 py-3 text-right">Totales:</td>
+                                        <td colSpan={3} className="px-4 py-3 text-right">Totales:</td>
                                         <td className="px-4 py-3 text-right">{order.totalToThresh.toFixed(2)}</td>
                                         <td className="px-4 py-3 text-right">{order.totalPrimeras.toFixed(2)}</td>
                                         <td className="px-4 py-3 text-right">{order.totalCatadura.toFixed(2)}</td>

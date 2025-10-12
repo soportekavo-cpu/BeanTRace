@@ -172,11 +172,11 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                              <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800">
                                 <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">Trillado</p>
-                                <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{receipt.trillado.toFixed(2)}</p>
+                                <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{Number(receipt.trillado).toFixed(2)}</p>
                             </div>
                             <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-900/50 border border-purple-200 dark:border-purple-800">
                                 <p className="text-sm text-purple-800 dark:text-purple-300 font-medium">En Bodega</p>
-                                <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{receipt.enBodega.toFixed(2)}</p>
+                                <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{Number(receipt.enBodega).toFixed(2)}</p>
                             </div>
                             <CalculatedFieldDisplay label="Recibo Devuelto" value={receipt.reciboDevuelto ? 'Sí' : 'No'} />
                             <CalculatedFieldDisplay label="Notas" value={receipt.notas} className="col-span-full"/>
@@ -496,9 +496,9 @@ const IngresoPage: React.FC = () => {
                                     <td className="px-6 py-4 font-medium text-foreground">{receipt.recibo}</td>
                                     <td className="px-6 py-4">{receipt.proveedorName}</td>
                                     <td className="px-6 py-4">{receipt.tipoCafe}</td>
-                                    <td className="px-6 py-4 text-right">{receipt.pesoNeto.toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-right">{receipt.trillado.toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{receipt.enBodega.toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right">{Number(receipt.pesoNeto).toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right">{Number(receipt.trillado).toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{Number(receipt.enBodega).toFixed(2)}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
                                             <button 

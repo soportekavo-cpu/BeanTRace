@@ -168,13 +168,23 @@ export interface ThreshingOrder {
 export interface ThreshingOrderReceipt {
     id?: string;
     threshingOrderId: string;
-    receiptId: string;
-    receiptNumber: string;
-    supplierName: string;
+    // Generic source ID (receipt, vignette, or mezcla)
+    receiptId: string; 
+    // Generic source number
+    receiptNumber: string; 
+    
+    // NEW: to distinguish source type
+    inputType: 'Recibo' | 'Viñeta' | 'Mezcla'; 
+    
+    supplierName?: string; // Optional, mainly for receipts
     coffeeType: string;
     amountToThresh: number;
     primeras: number;
     catadura: number;
+
+    // For Viñetas/Mezclas with projected yield
+    projectedPrimerasPercent?: number;
+    projectedCataduraPercent?: number;
 }
 
 export interface CoffeeType {

@@ -76,12 +76,13 @@ const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, 
             </section>
             
             <section style={{ marginTop: '30px', fontSize: '14px' }}>
-                 <h2 style={{ borderBottom: '1px solid #ccc', paddingBottom: '8px', marginBottom: '15px', fontSize: '18px' }}>Detalle de Recibos a Trillar</h2>
+                 <h2 style={{ borderBottom: '1px solid #ccc', paddingBottom: '8px', marginBottom: '15px', fontSize: '18px' }}>Detalle de Insumos a Trillar</h2>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f3f4f6' }}>
                         <tr>
-                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Recibo No.</th>
-                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Proveedor</th>
+                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Tipo Insumo</th>
+                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>No.</th>
+                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Origen/Proveedor</th>
                             <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>Cantidad a Trillar</th>
                             <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>Primeras (Estimado)</th>
                             <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>Catadura (Estimado)</th>
@@ -90,8 +91,9 @@ const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, 
                     <tbody>
                         {receipts.map(r => (
                             <tr key={r.id}>
+                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{r.inputType}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd' }}>{r.receiptNumber}</td>
-                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{r.supplierName}</td>
+                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{r.supplierName || 'N/A'}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{r.amountToThresh.toFixed(2)}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{r.primeras.toFixed(2)}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{r.catadura.toFixed(2)}</td>
@@ -100,7 +102,7 @@ const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, 
                     </tbody>
                     <tfoot style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
                         <tr>
-                            <td colSpan={2} style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>Totales:</td>
+                            <td colSpan={3} style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>Totales:</td>
                             <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{order.totalToThresh.toFixed(2)}</td>
                             <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{order.totalPrimeras.toFixed(2)}</td>
                             <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{order.totalCatadura.toFixed(2)}</td>
