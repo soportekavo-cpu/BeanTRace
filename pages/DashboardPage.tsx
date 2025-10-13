@@ -14,6 +14,10 @@ import ByproductDetailModal from '../components/widgets/details/ByproductDetailM
 import MixtureDetailModal from '../components/widgets/details/MixtureDetailModal';
 import ActivityDetailModal from '../components/widgets/details/ActivityDetailModal';
 import SettingsIcon from '../components/icons/SettingsIcon';
+import PrimerasInventoryWidget from '../components/widgets/PrimerasInventoryWidget';
+import UpcomingShipmentsDetailModal from '../components/widgets/details/UpcomingShipmentsDetailModal';
+import PrimerasDetailModal from '../components/widgets/details/PrimerasDetailModal';
+
 
 export interface DashboardData {
     contracts: Contract[];
@@ -26,21 +30,22 @@ export interface DashboardData {
     threshingOrders: ThreshingOrder[];
 }
 
-export type WidgetKey = 'alerts' | 'projections' | 'rawMaterial' | 'byproducts' | 'mixtures' | 'activity';
+export type WidgetKey = 'alerts' | 'projections' | 'rawMaterial' | 'primeras' | 'byproducts' | 'mixtures' | 'activity';
 
 const allWidgets: Record<WidgetKey, { name: string; component: React.FC<any> }> = {
     alerts: { name: 'Alertas y Pendientes', component: AlertsWidget },
     projections: { name: 'Proyección de Compra', component: PurchaseProjectionWidget },
     rawMaterial: { name: 'Inventario Materia Prima', component: RawMaterialInventoryWidget },
+    primeras: { name: 'Inventario de Primeras (Oro)', component: PrimerasInventoryWidget },
     byproducts: { name: 'Inventario Subproductos', component: ByproductInventoryWidget },
     mixtures: { name: 'Inventario de Mezclas', component: MixtureInventoryWidget },
     activity: { name: 'Actividad Reciente', component: RecentActivityWidget },
 };
 
-const defaultWidgets: WidgetKey[] = ['alerts', 'projections', 'rawMaterial', 'byproducts', 'mixtures', 'activity'];
+const defaultWidgets: WidgetKey[] = ['alerts', 'activity', 'rawMaterial', 'primeras', 'byproducts', 'mixtures', 'projections'];
 
 type ModalState = {
-    type: 'fixations' | 'rawMaterial' | 'byproducts' | 'mixtures' | 'activity' | null;
+    type: 'fixations' | 'rawMaterial' | 'byproducts' | 'primeras' | 'mixtures' | 'activity' | 'upcomingShipments' | null;
     payload?: any;
 };
 
@@ -122,8 +127,12 @@ const DashboardPage: React.FC = () => {
         switch (modal.type) {
             case 'fixations':
                 return <FixationsDetailModal lots={modal.payload} contracts={data.contracts} onClose={() => setModal({ type: null })} />;
+            case 'upcomingShipments':
+                return <UpcomingShipmentsDetailModal contracts={modal.payload} onClose={() => setModal({ type: null })} />;
             case 'rawMaterial':
                 return <RawMaterialDetailModal coffeeType={modal.payload} receipts={data.purchaseReceipts} suppliers={data.suppliers} onClose={() => setModal({ type: null })} />;
+            case 'primeras':
+                return <PrimerasDetailModal primerasType={modal.payload} vignettes={data.vignettes} onClose={() => setModal({ type: null })} />;
             case 'byproducts':
                 return <ByproductDetailModal byproductType={modal.payload} vignettes={data.vignettes} onClose={() => setModal({ type: null })} />;
             case 'mixtures':
@@ -147,8 +156,12 @@ const DashboardPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {visibleWidgets.map(key => {
                     const WidgetComponent = allWidgets[key].component;
+                    let colSpanClass = 'lg:col-span-1';
+                    if (key === 'activity' || key === 'alerts') colSpanClass = 'lg:col-span-2';
+                    if (key === 'projections') colSpanClass = 'lg:col-span-4';
+                    
                     return (
-                        <div key={key} className={`bg-card border border-border rounded-lg shadow-sm p-4 flex flex-col ${key === 'activity' ? 'lg:col-span-2' : ''} ${key === 'projections' ? 'lg:col-span-4' : ''}`}>
+                        <div key={key} className={`bg-card border border-border rounded-lg shadow-sm p-4 flex flex-col ${colSpanClass}`}>
                             <WidgetComponent data={data} onWidgetClick={handleWidgetClick} />
                         </div>
                     );

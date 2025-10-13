@@ -128,7 +128,7 @@ const PurchaseProjectionWidget: React.FC<{ data: DashboardData; onWidgetClick: (
         <>
             <h3 className="text-lg font-semibold text-foreground mb-4">Proyección de Compra (qqs.)</h3>
             <div className="flex-grow flex flex-col md:flex-row gap-6">
-                <ProjectionCard title="Proyección Cafés de Altura" data={projections.altura} color="blue" primaryRawMaterial="Pergamino"/>
+                <ProjectionCard title="Proyección Cafés Lavados" data={projections.altura} color="blue" primaryRawMaterial="Pergamino"/>
                 <ProjectionCard title="Proyección Cafés Naturales" data={projections.naturales} color="red" primaryRawMaterial="Cereza"/>
             </div>
         </>

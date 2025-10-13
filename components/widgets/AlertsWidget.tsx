@@ -5,7 +5,12 @@ const AlertsWidget: React.FC<{ data: DashboardData; onWidgetClick: (type: string
     const { contracts, contractLots, vignettes } = data;
 
     const alerts = useMemo(() => {
-        const pendingFixationLots = contractLots.filter(l => !l.fijacion || l.fijacion === 0);
+        // Filter out lots from "Alquiler de Licencia" contracts
+        const activeContracts = contracts.filter(c => !c.isServiceContract && !c.isFinished);
+        const activeContractIds = new Set(activeContracts.map(c => c.id));
+        const activeContractLots = contractLots.filter(l => activeContractIds.has(l.contractId));
+        
+        const pendingFixationLots = activeContractLots.filter(l => !l.fijacion || l.fijacion === 0);
         
         const chibolaInventory = vignettes
             .filter(v => (v.status === 'En Bodega' || v.status === 'Mezclada Parcialmente') && v.tipo.toLowerCase().includes('chibola'))
@@ -44,6 +49,15 @@ const AlertsWidget: React.FC<{ data: DashboardData; onWidgetClick: (type: string
 
     }, [contracts, contractLots, vignettes]);
 
+    const fixationText = alerts.pendingFixationLots.length === 1
+        ? '1 Partida con fijación pendiente'
+        : `${alerts.pendingFixationLots.length} Partidas con fijación pendiente`;
+
+    const shipmentText = alerts.upcomingShipments.length === 1
+        ? '1 Contrato con embarque próximo'
+        : `${alerts.upcomingShipments.length} Contratos con embarque próximo`;
+
+
     return (
         <>
             <h3 className="text-lg font-semibold text-foreground mb-4">Alertas y Pendientes</h3>
@@ -61,14 +75,14 @@ const AlertsWidget: React.FC<{ data: DashboardData; onWidgetClick: (type: string
                         {alerts.pendingFixationLots.length > 0 && (
                             <button onClick={() => onWidgetClick('fixations', alerts.pendingFixationLots)} className="w-full text-left flex items-center gap-3 p-3 text-sm font-medium rounded-lg border border-red-500 text-red-600 dark:text-red-400 animate-pulse-opacity hover:bg-red-500/10">
                                 <svg width="16" height="16" viewBox="0 0 24 24" className="flex-shrink-0" fill="currentColor"><path d="M12 2L2 22h20L12 2z" /></svg>
-                                <span>{alerts.pendingFixationLots.length} partida(s) de contrato sin fijación</span>
+                                <span>{fixationText}</span>
                             </button>
                         )}
                          {alerts.upcomingShipments.length > 0 && (
-                            <div className="flex items-center gap-3 p-3 text-sm font-medium rounded-lg border border-cyan-500 text-cyan-600 dark:text-cyan-400">
+                            <button onClick={() => onWidgetClick('upcomingShipments', alerts.upcomingShipments)} className="w-full text-left flex items-center gap-3 p-3 text-sm font-medium rounded-lg border border-cyan-500 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                <span>{alerts.upcomingShipments.length} contrato(s) con embarque próximo.</span>
-                            </div>
+                                <span>{shipmentText}</span>
+                            </button>
                          )}
                          {alerts.chibolaInventory > 25 && (
                             <div className="flex items-center gap-3 p-3 text-sm font-medium rounded-lg border border-orange-500 text-orange-600 dark:text-orange-400">
