@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, Exporter, Buyer } from '../types';
 import CheckIcon from '../components/icons/CheckIcon';
+import ToggleSwitch from '../components/ToggleSwitch';
 
 interface CreateContractPageProps {
   onCancel: () => void;
@@ -24,18 +25,36 @@ const InputField: React.FC<{ label: string, id: string, type?: string, value: st
   </div>
 );
 
+const marketMonths = ['Marzo', 'Mayo', 'Julio', 'Septiembre', 'Diciembre'];
+const allMonths = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+const getSuggestedMarketMonth = () => {
+    const currentMonth = new Date().getMonth(); // 0-11
+    // Map market months to their index
+    const marketMonthIndices = { 'Marzo': 2, 'Mayo': 4, 'Julio': 6, 'Septiembre': 8, 'Diciembre': 11 };
+    
+    for (const month of marketMonths) {
+        if (marketMonthIndices[month as keyof typeof marketMonthIndices] > currentMonth) {
+            return month;
+        }
+    }
+    return 'Marzo'; // Default to next year's first market month
+};
+
+
 const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSaveSuccess }) => {
   const [contractNumber, setContractNumber] = useState('');
   const [exporterId, setExporterId] = useState('');
   const [buyerId, setBuyerId] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [coffeeType, setCoffeeType] = useState('');
-  const [position, setPosition] = useState('');
+  const [position, setPosition] = useState(getSuggestedMarketMonth());
   const [differential, setDifferential] = useState('');
-  const [priceUnit, setPriceUnit] = useState<'CTS/LB' | '46 Kg.'>('CTS/LB');
-  const [shipmentMonth, setShipmentMonth] = useState('');
+  const [priceUnit, setPriceUnit] = useState<'CTS/LB' | '46 Kg.'>('46 Kg.');
+  const [shipmentMonth, setShipmentMonth] = useState(allMonths[new Date().getMonth()]);
   const [isFinished, setIsFinished] = useState(false);
   const [certifications, setCertifications] = useState<string[]>([]);
+  const [isServiceContract, setIsServiceContract] = useState(false);
   
   const [exporters, setExporters] = useState<Exporter[]>([]);
   const [buyers, setBuyers] = useState<Buyer[]>([]);
@@ -52,6 +71,12 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         ]);
         setExporters(exportersData);
         setBuyers(buyersData);
+        
+        const dizano = exportersData.find(e => e.name === 'Dizano, S.A.');
+        if (dizano) {
+            setExporterId(dizano.id);
+        }
+
       } catch (err) {
         console.error("Failed to fetch exporters or buyers: ", err);
         setError("No se pudieron cargar las exportadoras o compradores.");
@@ -100,6 +125,7 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         shipmentMonth,
         isFinished,
         certifications,
+        isServiceContract,
       };
 
       await api.addDocument<Contract>('contracts', newContract);
@@ -151,7 +177,12 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
           <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Detalles del Café y Precio</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <InputField label="Tipo de Café" id="coffeeType" value={coffeeType} onChange={(e) => setCoffeeType(e.target.value)} placeholder="Ej: SHB, Natural" />
-            <InputField label="Posición (Mes Mercado)" id="position" value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Ej: Julio" />
+            <div>
+                 <label htmlFor="position" className="block text-sm font-medium text-muted-foreground mb-1">Posición (Mes Mercado)</label>
+                <select id="position" value={position} onChange={(e) => setPosition(e.target.value)} className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm">
+                    {marketMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+            </div>
             <InputField label="Diferencial ($)" id="differential" type="number" value={differential} onChange={(e) => setDifferential(e.target.value)} placeholder="Ej: 10, -15" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8 mt-8 items-start">
@@ -163,7 +194,10 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
               </div>
             </div>
             <div className="md:col-start-2">
-                 <InputField label="Mes de Embarque" id="shipmentMonth" value={shipmentMonth} onChange={(e) => setShipmentMonth(e.target.value)} placeholder="Ej: Agosto" />
+                <label htmlFor="shipmentMonth" className="block text-sm font-medium text-muted-foreground mb-1">Mes de Embarque</label>
+                <select id="shipmentMonth" value={shipmentMonth} onChange={(e) => setShipmentMonth(e.target.value)} className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm">
+                    {allMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
             </div>
              <div className="mt-2 col-span-1 md:col-span-2">
                 <label className="block text-sm font-medium text-muted-foreground mb-2">Certificaciones del Contrato</label>
@@ -196,24 +230,33 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         {/* Status & Documents */}
         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
            <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Estado y Documentos</h3>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                    <div>
-                        <p className="font-medium text-foreground">Contrato Terminado</p>
-                        <p className="text-sm text-muted-foreground">Indica si el contrato se ha completado.</p>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <div className="p-4 rounded-lg border border-border space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium text-foreground">Contrato Terminado</p>
+                            <p className="text-sm text-muted-foreground">Indica si el contrato se ha completado.</p>
+                        </div>
+                        <ToggleSwitch id="isFinished" checked={isFinished} onChange={setIsFinished} />
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={isFinished} onChange={() => setIsFinished(!isFinished)} className="sr-only peer" />
-                        <div className="w-11 h-6 bg-muted rounded-full peer peer-focus:ring-2 peer-focus:ring-ring dark:bg-secondary peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                    </label>
+                     <div className="flex items-center justify-between pt-4 border-t">
+                        <div>
+                            <p className="font-medium text-foreground">Alquiler de Licencia</p>
+                            <p className="text-sm text-muted-foreground">Activar si solo se presta la licencia.</p>
+                        </div>
+                        <ToggleSwitch id="isServiceContract" checked={isServiceContract} onChange={setIsServiceContract} />
+                    </div>
                 </div>
-                 <div>
-                  <label htmlFor="contractPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Contrato</label>
-                  <input type="file" id="contractPdf" accept=".pdf" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
-                </div>
-                <div>
-                  <label htmlFor="instructionsPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Instrucciones</label>
-                  <input type="file" id="instructionsPdf" accept=".pdf" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+
+                <div className="space-y-4">
+                     <div>
+                      <label htmlFor="contractPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Contrato</label>
+                      <input type="file" id="contractPdf" accept=".pdf" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                    </div>
+                    <div>
+                      <label htmlFor="instructionsPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Instrucciones</label>
+                      <input type="file" id="instructionsPdf" accept=".pdf" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                    </div>
                 </div>
            </div>
         </div>

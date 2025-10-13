@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { Mezcla, Viñeta, Rendimiento, Reproceso } from '../types';
+import { Mezcla, Viñeta, Rendimiento, Reproceso, ThreshingOrderReceipt, Salida } from '../types';
 import PlusIcon from '../components/icons/PlusIcon';
 import EyeIcon from '../components/icons/EyeIcon';
 import PrinterIcon from '../components/icons/PrinterIcon';
@@ -18,6 +18,17 @@ const formatDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-');
     return `${day}/${month}/${year}`;
 };
+
+const StatusBadge: React.FC<{ status: Mezcla['status'] }> = ({ status }) => {
+    const statusStyles: Record<Mezcla['status'], string> = {
+        'Activo': 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
+        'Despachado Parcialmente': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
+        'Agotado': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+    };
+    const style = statusStyles[status] || statusStyles['Agotado'];
+    return <span className={`px-2 py-1 text-xs font-medium rounded-full ${style}`}>{status}</span>;
+};
+
 
 const MezclasPage: React.FC = () => {
     const { roleDetails } = useAuth();
@@ -82,6 +93,25 @@ const MezclasPage: React.FC = () => {
         if (!mezclaToDelete) return;
 
         try {
+            // Deletion Lock Check
+            const [allThreshingOrderReceipts, allSalidas] = await Promise.all([
+                api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts'),
+                api.getCollection<Salida>('salidas')
+            ]);
+    
+            const isUsedInThreshing = allThreshingOrderReceipts.some(tor => tor.inputType === 'Mezcla' && tor.receiptId === mezclaToDelete.id);
+            const isUsedInSalida = allSalidas.some(s => s.status === 'Activo' && s.mezclas?.some(m => m.mezclaId === mezclaToDelete.id));
+    
+            if (isUsedInThreshing || isUsedInSalida) {
+              let usedIn = [];
+              if (isUsedInThreshing) usedIn.push("órdenes de trilla");
+              if (isUsedInSalida) usedIn.push("salidas");
+              alert(`No se puede eliminar la mezcla '${mezclaToDelete.mezclaNumber}' porque está siendo utilizada en ${usedIn.join(' y ')}. Anule los procesos posteriores primero.`);
+              setMezclaToDelete(null);
+              return;
+            }
+
+            // Proceed with deletion if not locked
             const allRendimientos = await api.getCollection<Rendimiento>('rendimientos');
             const allReprocesos = await api.getCollection<Reproceso>('reprocesos');
             const docsToUpdate = new Map<string, { type: 'Rendimiento' | 'Reproceso', doc: any }>();
@@ -142,7 +172,7 @@ const MezclasPage: React.FC = () => {
 
     const filteredMezclas = useMemo(() => {
         if (showOnlyInStock) {
-            return mezclas.filter(m => m.sobranteEnBodega > 0.005);
+            return mezclas.filter(m => m.status === 'Activo' || m.status === 'Despachado Parcialmente');
         }
         return mezclas;
     }, [mezclas, showOnlyInStock]);
@@ -182,12 +212,13 @@ const MezclasPage: React.FC = () => {
                             <th scope="col" className="px-6 py-3 text-right">Total Entrada (qqs.)</th>
                             <th scope="col" className="px-6 py-3 text-right">Despachado (qqs.)</th>
                             <th scope="col" className="px-6 py-3 text-right">En Bodega (qqs.)</th>
+                            <th scope="col" className="px-6 py-3">Estado</th>
                             <th scope="col" className="px-6 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={7} className="text-center py-10">Cargando mezclas...</td></tr>
+                            <tr><td colSpan={8} className="text-center py-10">Cargando mezclas...</td></tr>
                         ) : filteredMezclas.length > 0 ? (
                             filteredMezclas.map(mezcla => (
                                 <tr key={mezcla.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setMezclaToView(mezcla)}>
@@ -197,6 +228,7 @@ const MezclasPage: React.FC = () => {
                                     <td className="px-6 py-4 text-right">{mezcla.totalInputWeight.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right">{mezcla.cantidadDespachada.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right font-bold text-green-600">{mezcla.sobranteEnBodega.toFixed(2)}</td>
+                                    <td className="px-6 py-4"><StatusBadge status={mezcla.status} /></td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
                                             <button className="text-blue-500 hover:text-blue-700" title="Ver Detalle"><EyeIcon className="w-5 h-5" /></button>
@@ -208,7 +240,7 @@ const MezclasPage: React.FC = () => {
                                 </tr>
                             ))
                         ) : (
-                             <tr><td colSpan={7} className="text-center py-10">{showOnlyInStock ? "No hay mezclas con inventario en bodega." : "No hay mezclas creadas."}</td></tr>
+                             <tr><td colSpan={8} className="text-center py-10">{showOnlyInStock ? "No hay mezclas con inventario en bodega." : "No hay mezclas creadas."}</td></tr>
                         )}
                     </tbody>
                 </table>

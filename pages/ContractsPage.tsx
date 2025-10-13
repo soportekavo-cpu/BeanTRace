@@ -15,6 +15,7 @@ import ThreshingOrderPDF from '../components/ThreshingOrderPDF';
 import { printComponent } from '../utils/printUtils';
 import { useAuth } from '../contexts/AuthContext';
 import EditThreshingOrderForm from '../components/EditThreshingOrderForm';
+import ToggleSwitch from '../components/ToggleSwitch';
 
 
 const formatDate = (dateString: string) => {
@@ -77,10 +78,12 @@ const AlertIcon: React.FC<{ type: 'triangle' | 'dot', color: string, isPulsing?:
     return <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0`} style={{ backgroundColor: color }}></div>;
 };
 
-const AlertsBar: React.FC<{ lots: ContractLot[], threshingOrders: ThreshingOrder[], contractQqs: number }> = ({ lots, threshingOrders, contractQqs }) => {
+const AlertsBar: React.FC<{ lots: ContractLot[], threshingOrders: ThreshingOrder[], contract: Contract }> = ({ lots, threshingOrders, contract }) => {
     const alerts = useMemo(() => {
-        if (!lots) return [];
+        if (!lots || contract.isServiceContract) return [];
         const activeAlerts: { text: string, icon: React.ReactNode, colorClass: string, pulse: boolean }[] = [];
+        
+        const contractQqs = lots.reduce((sum, l) => sum + l.pesoQqs, 0);
 
         // Threshing Alert
         const totalProducedPrimeras = threshingOrders.reduce((sum, order) => sum + order.totalPrimeras, 0);
@@ -134,7 +137,7 @@ const AlertsBar: React.FC<{ lots: ContractLot[], threshingOrders: ThreshingOrder
         }
         
         return activeAlerts;
-    }, [lots, threshingOrders, contractQqs]);
+    }, [lots, threshingOrders, contract]);
 
     if (alerts.length === 0) return null;
 
@@ -332,13 +335,18 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
             <button onClick={onBack} className="text-sm font-medium text-green-600 hover:underline">
                 &larr; Volver a Contratos
             </button>
-            <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+            <div className="bg-card border border-border rounded-lg shadow-sm p-6 relative">
                 <div className="flex justify-between items-start">
                     <div>
                         <h2 className="text-2xl font-bold text-red-600 dark:text-red-500">Contrato: {contract.contractNumber}</h2>
                         <p className="text-muted-foreground">{contract.buyerName}</p>
                     </div>
                 </div>
+                {contract.isServiceContract && (
+                    <div className="absolute top-4 right-4 bg-yellow-100 text-yellow-800 text-sm font-bold px-4 py-2 rounded-lg shadow-md border border-yellow-200 z-10">
+                        ALQUILER DE LICENCIA
+                    </div>
+                )}
                  <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mt-6 text-sm">
                     <div><p className="text-muted-foreground">Exportadora</p><p className="font-medium text-foreground">{contract.exporterName}</p></div>
                     <div><p className="text-muted-foreground">Fecha Venta</p><p className="font-medium text-foreground">{formatDate(contract.saleDate)}</p></div>
@@ -368,7 +376,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
                 </div>
             </div>
 
-            <AlertsBar lots={lots} threshingOrders={threshingOrders} contractQqs={contractQqs} />
+            <AlertsBar lots={lots} threshingOrders={threshingOrders} contract={contract} />
 
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                 <div className="flex justify-between items-center mb-4">
@@ -440,7 +448,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
              <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-foreground">Órdenes de Trilla</h3>
-                     {permissions?.add && <button onClick={() => setView('createThreshingOrder')} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                     {permissions?.add && <button onClick={() => setView('createThreshingOrder')} disabled={!!contract.isServiceContract} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed">
                         <FilePlusIcon className="w-4 h-4" /> Crear Orden de Trilla
                     </button>}
                 </div>
@@ -465,7 +473,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
                             return (
                                 <div key={order.id} className="p-3 text-sm rounded-md border border-green-500 bg-green-500/10 text-green-700 dark:text-green-400 flex items-center gap-3">
                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                    <span>Has completado la orden de trilla <strong>{order.orderNumber}</strong>{sobrante > 0.005 ? `, tienes un sobrante estimado de <strong>${sobrante.toFixed(2)} qqs.</strong>` : '.'}</span>
+                                    <span>Has completado la orden de trilla <strong>{order.orderNumber}</strong>{sobrante > 0.005 ? <>, tienes un sobrante estimado de <strong>{sobrante.toFixed(2)} qqs.</strong></> : '.'}</span>
                                 </div>
                             );
                         }
@@ -601,7 +609,7 @@ const GlobalAlertsBar: React.FC<{
         }, {} as Record<string, ContractLot[]>);
 
         for (const contract of contracts) {
-            if (contract.isFinished) continue;
+            if (contract.isFinished || contract.isServiceContract) continue;
 
             const contractLots = lotsByContract[contract.id] || [];
             
@@ -697,6 +705,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
     const [contractToEdit, setContractToEdit] = useState<Contract | null>(null);
     const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
     const [contractQqs, setContractQqs] = useState<Map<string, number>>(new Map());
+    const [showAll, setShowAll] = useState(false);
 
     const fetchData = async () => {
         setLoading(true);
@@ -735,6 +744,14 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
         addDataChangeListener(handleDataChange);
         return () => removeDataChangeListener(handleDataChange);
     }, []);
+
+    const filteredContracts = useMemo(() => {
+        if (showAll) {
+            return contracts;
+        }
+        return contracts.filter(c => !c.isFinished && !c.isServiceContract);
+    }, [contracts, showAll]);
+
 
     const lotsByContractId = useMemo(() => {
         return lots.reduce((acc, lot) => {
@@ -791,9 +808,15 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-foreground">Contratos</h2>
-                {permissions?.add && <button onClick={onCreateContractClick} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
-                    <PlusIcon className="w-4 h-4" /> Crear Contrato
-                </button>}
+                <div className="flex items-center gap-4">
+                     <div className="flex items-center gap-2">
+                        <ToggleSwitch id="showAllContracts" checked={showAll} onChange={setShowAll} />
+                        <label htmlFor="showAllContracts" className="text-sm font-medium text-muted-foreground select-none">Mostrar todos</label>
+                    </div>
+                    {permissions?.add && <button onClick={onCreateContractClick} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                        <PlusIcon className="w-4 h-4" /> Crear Contrato
+                    </button>}
+                </div>
             </div>
 
             <GlobalAlertsBar contracts={contracts} lots={lots} threshingOrders={threshingOrders} />
@@ -817,8 +840,8 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                     <tbody>
                         {loading ? (
                             <tr><td colSpan={10} className="text-center py-10">Cargando contratos...</td></tr>
-                        ) : contracts.length > 0 ? (
-                            contracts.map((contract) => {
+                        ) : filteredContracts.length > 0 ? (
+                            filteredContracts.map((contract) => {
                                 const contractLots = lotsByContractId[contract.id] || [];
                                 const fixPendCount = contractLots.filter(l => !l.fijacion || l.fijacion === 0).length;
                                 
@@ -849,7 +872,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                                 );
                             })
                         ) : (
-                             <tr><td colSpan={10} className="text-center py-10">No hay contratos para mostrar. ¡Crea el primero!</td></tr>
+                             <tr><td colSpan={10} className="text-center py-10">{showAll ? 'No hay contratos para mostrar.' : 'No hay contratos activos. ¡Crea uno o activa el filtro "Mostrar todos"!'}</td></tr>
                         )}
                     </tbody>
                 </table>

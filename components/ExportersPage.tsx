@@ -1,8 +1,6 @@
-
-
 import React, { useState, useEffect } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { Exporter } from '../types';
+import { Exporter, Contract } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -49,7 +47,6 @@ const ExportersPage: React.FC = () => {
         
         setIsAdding(true);
         try {
-// FIX: Corrected the generic type for addDocument to be Exporter, as the generic type T must have an 'id' property.
             await api.addDocument<Exporter>("exporters", { 
                 name: newExporterName.trim(),
                 licenseNumber: newLicenseNumber.trim()
@@ -74,6 +71,12 @@ const ExportersPage: React.FC = () => {
     const confirmDelete = async () => {
         if (!exporterToDelete) return;
         try {
+            const contracts = await api.getCollection<Contract>('contracts', c => c.exporterId === exporterToDelete.id);
+            if (contracts.length > 0) {
+                alert(`No se puede eliminar la exportadora '${exporterToDelete.name}' porque está asociada a ${contracts.length} contrato(s).`);
+                setExporterToDelete(null);
+                return;
+            }
             await api.deleteDocument('exporters', exporterToDelete.id!);
         } catch (error) {
             console.error("Error deleting exporter:", error);
@@ -98,7 +101,6 @@ const ExportersPage: React.FC = () => {
 
         setIsUpdating(true);
         try {
-            // FIX: Corrected the updateDocument call to pass a valid Partial<Exporter> object.
             await api.updateDocument<Exporter>('exporters', exporterToEdit.id!, {
                 name: exporterToEdit.name.trim(),
                 licenseNumber: exporterToEdit.licenseNumber.trim()

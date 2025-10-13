@@ -30,6 +30,7 @@ const seedData = {
                 admin: { ...allPermissions },
                 coffeeTypes: { ...allPermissions },
                 byproducts: { ...allPermissions },
+                trazabilidad: { ...allPermissions },
             }
         },
         { 
@@ -46,6 +47,7 @@ const seedData = {
                 admin: { ...noPermissions },
                 coffeeTypes: { ...viewOnlyPermissions },
                 byproducts: { ...viewOnlyPermissions },
+                trazabilidad: { ...viewOnlyPermissions },
             }
         },
         { 
@@ -62,6 +64,7 @@ const seedData = {
                 admin: { ...noPermissions },
                 coffeeTypes: { ...noPermissions },
                 byproducts: { ...noPermissions },
+                trazabilidad: { ...noPermissions },
             }
         },
     ],

@@ -177,7 +177,7 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
                 }));
                 const data: Omit<Salida, 'id'> = { ...commonData, tipoSalida: 'Mezcla', clienteId: formState.clienteId, clienteName: clients.find(c => c.id === formState.clienteId)?.name, mezclas: mezclasData };
                 savedSalida = isEditMode ? await api.updateDocument<Salida>('salidas', existingSalida!.id, data) : await api.addDocument<Salida>('salidas', data);
-                // Update Inventory
+                
                 const oldMezclaUsage = new Map(isEditMode ? existingSalida!.mezclas?.map(m => [m.mezclaId, m.pesoUtilizado]) : []);
                 const newMezclaUsage = new Map(mezclasData.map(m => [m.mezclaId, m.pesoUtilizado]));
                 const allAffectedMezclaIds = new Set([...oldMezclaUsage.keys(), ...newMezclaUsage.keys()]);
@@ -186,8 +186,13 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
                     if (!mezcla) continue;
                     const diff = (newMezclaUsage.get(id) || 0) - (oldMezclaUsage.get(id) || 0);
                     if (diff === 0) continue;
-                    // FIX: Explicitly cast values to Number before arithmetic operation
-                    await api.updateDocument<Mezcla>('mezclas', id, { cantidadDespachada: (Number(mezcla.cantidadDespachada) || 0) + diff, sobranteEnBodega: (Number(mezcla.sobranteEnBodega) || 0) - diff });
+                    const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) - diff;
+                    const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : 'Despachado Parcialmente';
+                    await api.updateDocument<Mezcla>('mezclas', id, { 
+                        cantidadDespachada: (Number(mezcla.cantidadDespachada) || 0) + diff, 
+                        sobranteEnBodega: newSobrante,
+                        status: newStatus
+                    });
                 }
             } else { // Devolución Recibo
                 const recibosData: SalidaReciboInput[] = formState.selectedRecibos.filter(r => r.reciboId && r.pesoDevuelto > 0).map(r => {

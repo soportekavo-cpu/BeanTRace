@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { Client } from '../types';
+import { Client, ThreshingOrder, Salida } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -72,6 +72,17 @@ const ClientsPage: React.FC = () => {
     const confirmDelete = async () => {
         if (!clientToDelete) return;
         try {
+            const [threshingOrders, salidas] = await Promise.all([
+                api.getCollection<ThreshingOrder>('threshingOrders', o => o.clientId === clientToDelete.id),
+                api.getCollection<Salida>('salidas', s => s.clienteId === clientToDelete.id)
+            ]);
+
+            if (threshingOrders.length > 0 || salidas.length > 0) {
+                alert(`No se puede eliminar el cliente '${clientToDelete.name}' porque está asociado a ${threshingOrders.length} orden(es) de venta local y ${salidas.length} salida(s).`);
+                setClientToDelete(null);
+                return;
+            }
+
             await api.deleteDocument('clients', clientToDelete.id!);
         } catch (error) {
             console.error("Error deleting client:", error);

@@ -7,6 +7,10 @@ const PurchaseProjectionWidget: React.FC<{ data: DashboardData; onWidgetClick: (
     const { contracts, contractLots, purchaseReceipts, threshingOrders } = data;
 
     const projections = useMemo(() => {
+        const relevantContracts = contracts.filter(c => !c.isServiceContract);
+        const relevantContractIds = new Set(relevantContracts.map(c => c.id));
+        const relevantLots = contractLots.filter(l => relevantContractIds.has(l.contractId));
+
         const alturaKeywords = ['prime', 'hb', 'shb', 'ep'];
         const alturaRawMaterials = ['Pergamino', 'Oro Lavado', 'Natas'];
 
@@ -48,9 +52,9 @@ const PurchaseProjectionWidget: React.FC<{ data: DashboardData; onWidgetClick: (
         };
 
         // --- Proyección para Cafés de Altura ---
-        const alturaContracts = contracts.filter(c => alturaKeywords.some(k => c.coffeeType.toLowerCase().includes(k)));
+        const alturaContracts = relevantContracts.filter(c => alturaKeywords.some(k => c.coffeeType.toLowerCase().includes(k)));
         const alturaContractIds = new Set(alturaContracts.map(c => c.id));
-        let necesidadAltura = contractLots.filter(l => alturaContractIds.has(l.contractId)).reduce((sum, l) => sum + l.pesoQqs, 0);
+        let necesidadAltura = relevantLots.filter(l => alturaContractIds.has(l.contractId)).reduce((sum, l) => sum + l.pesoQqs, 0);
         const ventasLocalesSHB = threshingOrders.filter(o => o.orderType === 'Venta Local').reduce((sum, o) => sum + (o.pesoVendido || 0), 0);
         necesidadAltura += ventasLocalesSHB;
         const trillasAltura = threshingOrders.filter(o => o.contractId && alturaContractIds.has(o.contractId)).reduce((sum, o) => sum + o.totalPrimeras, 0);
@@ -63,9 +67,9 @@ const PurchaseProjectionWidget: React.FC<{ data: DashboardData; onWidgetClick: (
         const estimacionCompraAltura = rendimientoPromedioPergamino > 0 ? deficitOroAltura / (rendimientoPromedioPergamino / 100) : 0;
 
         // --- Proyección para Naturales ---
-        const naturalContracts = contracts.filter(c => naturalKeywords.some(k => c.coffeeType.toLowerCase().includes(k)));
+        const naturalContracts = relevantContracts.filter(c => naturalKeywords.some(k => c.coffeeType.toLowerCase().includes(k)));
         const naturalContractIds = new Set(naturalContracts.map(c => c.id));
-        let necesidadNaturales = contractLots.filter(l => naturalContractIds.has(l.contractId)).reduce((sum, l) => sum + l.pesoQqs, 0);
+        let necesidadNaturales = relevantLots.filter(l => naturalContractIds.has(l.contractId)).reduce((sum, l) => sum + l.pesoQqs, 0);
         const trillasNaturales = threshingOrders.filter(o => o.contractId && naturalContractIds.has(o.contractId)).reduce((sum, o) => sum + o.totalPrimeras, 0);
         necesidadNaturales -= trillasNaturales;
         const oroPotencialNaturales = calculatePotentialGold(purchaseReceipts, naturalRawMaterials);

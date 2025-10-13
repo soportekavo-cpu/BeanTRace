@@ -14,6 +14,7 @@ import DollarSignIcon from '../components/icons/DollarSignIcon';
 import ChevronDownIcon from '../components/icons/ChevronDownIcon';
 import MixIcon from '../components/icons/MixIcon';
 import TruckIcon from '../components/icons/TruckIcon';
+import SearchIcon from '../components/icons/SearchIcon';
 
 // FIX: File 'file:///pages/DashboardPage.tsx' is not a module.
 import DashboardPage from './DashboardPage';
@@ -26,8 +27,9 @@ import RendimientosPage from './RendimientosPage';
 import VentasLocalesPage from './VentasLocalesPage';
 import MezclasPage from './MezclasPage';
 import SalidasPage from './SalidasPage';
+import TrazabilidadPage from './TrazabilidadPage';
 
-type Page = 'dashboard' | 'contracts' | 'ventasLocales' | 'ingreso' | 'rendimientos' | 'mezclas' | 'salidas' | 'entities' | 'admin';
+type Page = 'dashboard' | 'contracts' | 'ventasLocales' | 'ingreso' | 'rendimientos' | 'mezclas' | 'salidas' | 'trazabilidad' | 'entities' | 'admin';
 
 const allPages: { [key in Page]: React.FC<any> } = {
     'dashboard': DashboardPage,
@@ -37,6 +39,7 @@ const allPages: { [key in Page]: React.FC<any> } = {
     'rendimientos': RendimientosPage,
     'mezclas': MezclasPage,
     'salidas': SalidasPage,
+    'trazabilidad': TrazabilidadPage,
     'entities': EntitiesPage,
     'admin': AdminPage,
 };
@@ -160,6 +163,11 @@ const DashboardLayout: React.FC = () => {
                     {roleDetails?.permissions.salidas?.view && (
                          <NavLink pageId="salidas" label="Salidas">
                             <TruckIcon className="w-5 h-5" />
+                        </NavLink>
+                    )}
+                     {roleDetails?.permissions.trazabilidad?.view && (
+                         <NavLink pageId="trazabilidad" label="Trazabilidad">
+                            <SearchIcon className="w-5 h-5" />
                         </NavLink>
                     )}
                     {roleDetails?.permissions.entities?.view && (

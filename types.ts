@@ -73,6 +73,7 @@ export interface Contract {
     shipmentMonth: string;
     isFinished: boolean;
     certifications: string[];
+    isServiceContract?: boolean;
 }
 
 export interface ContractLot {
@@ -255,7 +256,7 @@ export interface Mezcla {
     tipoMezcla: string;
     cantidadDespachada: number;
     sobranteEnBodega: number;
-    status: 'Activo' | 'Anulado';
+    status: 'Activo' | 'Despachado Parcialmente' | 'Agotado';
 }
 
 export interface SalidaMezclaInput {

@@ -208,9 +208,14 @@ const ThreshingOrderFormLocal: React.FC<ThreshingOrderFormLocalProps> = ({ onCan
                 } else if (row.inputType === 'Mezcla') {
                     const mezcla = availableMezclas.find(m => m.id === row.sourceId);
                      if (mezcla) {
+                        const newDespachado = (Number(mezcla.cantidadDespachada) || 0) + (Number(row.amountToThresh) || 0);
+                        const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) - (Number(row.amountToThresh) || 0);
+                        const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : 'Despachado Parcialmente';
+
                         inventoryUpdatePromises.push(api.updateDocument<Mezcla>('mezclas', mezcla.id, {
-                            cantidadDespachada: (Number(mezcla.cantidadDespachada) || 0) + (Number(row.amountToThresh) || 0),
-                            sobranteEnBodega: (Number(mezcla.sobranteEnBodega) || 0) - (Number(row.amountToThresh) || 0),
+                            cantidadDespachada: newDespachado,
+                            sobranteEnBodega: newSobrante,
+                            status: newStatus,
                         }));
                     }
                 } else if (row.inputType === 'Viñeta') {

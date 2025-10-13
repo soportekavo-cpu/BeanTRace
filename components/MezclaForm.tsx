@@ -149,9 +149,7 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
                 const finalPesoNeto = (Number(originalVignetteInDoc.pesoNeto) || 0) + (Number(oldUsage) || 0) - (Number(newUsage) || 0);
 
                 let finalStatus: Viñeta['status'];
-                if (Math.abs(finalPesoNeto - originalVignetteInDoc.originalPesoNeto) < 0.005) {
-                    finalStatus = 'En Bodega';
-                } else if (finalPesoNeto <= 0.005) {
+                 if (finalPesoNeto <= 0.005) {
                     finalStatus = 'Mezclada';
                 } else {
                     finalStatus = 'Mezclada Parcialmente';
@@ -168,6 +166,7 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
             const totalInputWeight = finalInputVignettesData.reduce((sum, v) => sum + v.pesoUtilizado, 0);
             const despachado = existingMezcla?.cantidadDespachada || 0;
             const sobrante = totalInputWeight - despachado;
+            const newStatus: Mezcla['status'] = sobrante <= 0.005 ? 'Agotado' : (despachado > 0.005 ? 'Despachado Parcialmente' : 'Activo');
 
             const finalMezclaData = {
                 inputVignetteIds: finalInputVignettesData.map(v => v.vignetteId),
@@ -176,6 +175,7 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
                 tipoMezcla,
                 cantidadDespachada: despachado,
                 sobranteEnBodega: sobrante,
+                status: newStatus
             };
 
             if (isEditMode && existingMezcla) {
@@ -188,7 +188,6 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
                     ...finalMezclaData,
                     mezclaNumber,
                     creationDate: new Date().toISOString().split('T')[0],
-                    status: 'Activo',
                 };
                 const savedMezcla = await api.addDocument<Mezcla>('mezclas', data);
                 printComponent(<MezclaPDF mezcla={savedMezcla} />, `Mezcla-${savedMezcla.mezclaNumber}`);

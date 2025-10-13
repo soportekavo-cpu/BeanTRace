@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { Supplier } from '../types';
+import { Supplier, PurchaseReceipt } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -72,6 +72,12 @@ const SuppliersPage: React.FC = () => {
     const confirmDelete = async () => {
         if (!supplierToDelete) return;
         try {
+            const purchaseReceipts = await api.getCollection<PurchaseReceipt>('purchaseReceipts', pr => pr.proveedorId === supplierToDelete.id);
+            if (purchaseReceipts.length > 0) {
+                alert(`No se puede eliminar el proveedor '${supplierToDelete.name}' porque está asociado a ${purchaseReceipts.length} recibo(s) de compra.`);
+                setSupplierToDelete(null);
+                return;
+            }
             await api.deleteDocument('suppliers', supplierToDelete.id!);
         } catch (error) {
             console.error("Error deleting supplier:", error);

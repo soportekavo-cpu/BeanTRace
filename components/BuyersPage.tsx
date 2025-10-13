@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { Buyer } from '../types';
+import { Buyer, Contract } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -78,6 +78,12 @@ const BuyersPage: React.FC = () => {
     const confirmDelete = async () => {
         if (!buyerToDelete) return;
         try {
+            const contracts = await api.getCollection<Contract>('contracts', c => c.buyerId === buyerToDelete.id);
+            if (contracts.length > 0) {
+                alert(`No se puede eliminar el comprador '${buyerToDelete.name}' porque está asociado a ${contracts.length} contrato(s).`);
+                setBuyerToDelete(null);
+                return;
+            }
             await api.deleteDocument('buyers', buyerToDelete.id!);
         } catch (error) {
             console.error("Error deleting buyer:", error);

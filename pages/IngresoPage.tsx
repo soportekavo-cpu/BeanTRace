@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { PurchaseReceipt, Supplier, ThreshingOrderReceipt, ThreshingOrder, ContractLot } from '../types';
+import { PurchaseReceipt, Supplier, ThreshingOrderReceipt, ThreshingOrder, ContractLot, Salida } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
@@ -172,11 +172,11 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                              <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800">
                                 <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">Trillado</p>
-                                <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{Number(receipt.trillado).toFixed(2)}</p>
+                                <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{Number(receipt.trillado || 0).toFixed(2)}</p>
                             </div>
                             <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-900/50 border border-purple-200 dark:border-purple-800">
                                 <p className="text-sm text-purple-800 dark:text-purple-300 font-medium">En Bodega</p>
-                                <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{Number(receipt.enBodega).toFixed(2)}</p>
+                                <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{Number(receipt.enBodega || 0).toFixed(2)}</p>
                             </div>
                             <CalculatedFieldDisplay label="Recibo Devuelto" value={receipt.reciboDevuelto ? 'Sí' : 'No'} />
                             <CalculatedFieldDisplay label="Notas" value={receipt.notas} className="col-span-full"/>
@@ -367,7 +367,7 @@ const IngresoPage: React.FC = () => {
                 if (sortConfig.key === 'fecha') {
                     comparison = new Date(aValue).getTime() - new Date(bValue).getTime();
                 } else if (sortConfig.key === 'recibo') {
-                    comparison = parseInt(aValue, 10) - parseInt(bValue, 10);
+                    comparison = parseInt(aValue.split('-')[1], 10) - parseInt(bValue.split('-')[1], 10);
                 } else if (typeof aValue === 'number' && typeof bValue === 'number') {
                     comparison = aValue - bValue;
                 } else {
@@ -393,6 +393,23 @@ const IngresoPage: React.FC = () => {
     const confirmVoid = async () => {
         if (!receiptToVoid) return;
         try {
+            const [allThreshingOrderReceipts, allSalidas] = await Promise.all([
+                api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts'),
+                api.getCollection<Salida>('salidas'),
+            ]);
+    
+            const isUsedInThreshing = allThreshingOrderReceipts.some(tor => tor.inputType === 'Recibo' && tor.receiptId === receiptToVoid.id);
+            const isUsedInSalida = allSalidas.some(s => s.status === 'Activo' && s.tipoSalida === 'Devolución Recibo' && s.recibos?.some(r => r.reciboId === receiptToVoid.id));
+    
+            if (isUsedInThreshing || isUsedInSalida) {
+                let usedIn = [];
+                if (isUsedInThreshing) usedIn.push("una orden de trilla");
+                if (isUsedInSalida) usedIn.push("una salida (devolución)");
+                alert(`No se puede anular el recibo '${receiptToVoid.recibo}' porque está siendo utilizado en ${usedIn.join(' y ')}. Anule los procesos posteriores primero.`);
+                setReceiptToVoid(null);
+                return;
+            }
+
             await api.updateDocument<PurchaseReceipt>('purchaseReceipts', receiptToVoid.id, { 
                 status: 'Anulado',
                 enBodega: 0,
@@ -497,8 +514,8 @@ const IngresoPage: React.FC = () => {
                                     <td className="px-6 py-4">{receipt.proveedorName}</td>
                                     <td className="px-6 py-4">{receipt.tipoCafe}</td>
                                     <td className="px-6 py-4 text-right">{Number(receipt.pesoNeto).toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-right">{Number(receipt.trillado).toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{Number(receipt.enBodega).toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right">{Number(receipt.trillado || 0).toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{Number(receipt.enBodega || 0).toFixed(2)}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
                                             <button 
@@ -517,8 +534,8 @@ const IngresoPage: React.FC = () => {
                                             {permissions?.delete && <button 
                                                 className="text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed" 
                                                 onClick={(e) => { e.stopPropagation(); handleVoidClick(receipt); }}
-                                                disabled={receipt.status === 'Anulado' || receipt.trillado > 0}
-                                                title={receipt.status === 'Anulado' ? 'Recibo ya anulado' : (receipt.trillado > 0 ? 'No se puede anular, ya fue trillado' : 'Anular recibo')}>
+                                                disabled={receipt.status === 'Anulado' || Number(receipt.trillado || 0) > 0}
+                                                title={receipt.status === 'Anulado' ? 'Recibo ya anulado' : (Number(receipt.trillado || 0) > 0 ? 'No se puede anular, ya fue trillado' : 'Anular recibo')}>
                                                 <TrashIcon className="w-4 h-4" />
                                             </button>}
                                         </div>

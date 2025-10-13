@@ -20,6 +20,7 @@ const manageablePages = [
     { id: 'rendimientos', name: 'Rendimientos' },
     { id: 'mezclas', name: 'Mezclas' },
     { id: 'salidas', name: 'Salidas' },
+    { id: 'trazabilidad', name: 'Trazabilidad' },
     { id: 'entities', name: 'Entidades' },
     { id: 'admin', name: 'Administración' },
     { id: 'coffeeTypes', name: 'Tipos de Café' },
