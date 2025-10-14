@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { WidgetKey } from '../pages/DashboardPage';
 import CheckIcon from './icons/CheckIcon';
@@ -34,19 +35,20 @@ const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = ({ allWi
                 <h3 className="text-lg font-bold text-foreground mb-4">Personalizar Dashboard</h3>
                 <p className="text-sm text-muted-foreground mb-6">Selecciona los módulos de información que quieres ver en tu dashboard.</p>
                 <div className="space-y-3">
-                    {Object.entries(allWidgets).map(([key, widgetInfo]) => {
-                        const isSelected = selectedWidgets.has(key as WidgetKey);
+                    {/* FIX: Refactored to iterate over keys to resolve type inference issue with Object.entries. */}
+                    {(Object.keys(allWidgets) as WidgetKey[]).map((key) => {
+                        const widgetInfo = allWidgets[key];
+                        const isSelected = selectedWidgets.has(key);
                         return (
                              <button
                                 key={key}
-                                onClick={() => handleToggle(key as WidgetKey)}
+                                onClick={() => handleToggle(key)}
                                 className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
                                     isSelected
                                         ? 'bg-green-500/10 border-green-500 text-green-600'
                                         : 'bg-muted/50 border-border hover:border-gray-400'
                                 }`}
                             >
-                                {/* FIX: Access `name` property from the `widgetInfo` object to resolve type inference issue. */}
                                 <span className="font-semibold">{widgetInfo.name}</span>
                                 <span className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors flex-shrink-0 ${isSelected ? 'bg-green-500' : 'bg-background border border-border'}`}>
                                     {isSelected && <CheckIcon className="w-4 h-4 text-white" />}

@@ -46,8 +46,9 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
     
     useEffect(() => {
         const setPartidaNumber = async () => {
-            // Fetch only lots for the current exporter to calculate the correct correlative.
-            const exporterLots = await api.getCollection<ContractLot>('contractLots', l => l.partida.startsWith(`11/${exporter.licenseNumber}/`));
+            const exporterLots = await api.getCollection<ContractLot>('contractLots', l => 
+                l.partida.startsWith(`11/${exporter.licenseNumber}/`) && l.añoCosecha === contract.añoCosecha
+            );
             let nextNum = 1;
             if (exporterLots.length > 0) {
                 const usedCorrelatives = Array.from(new Set(exporterLots
@@ -67,7 +68,7 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
             setLot((prev: any) => ({...prev, partida}));
         };
         setPartidaNumber();
-    }, [exporter.licenseNumber]);
+    }, [exporter.licenseNumber, contract.añoCosecha]);
 
     const calculatePesoQqs = (bultos: number, pesoKg: number, priceUnit: 'CTS/LB' | '46 Kg.') => {
         if (bultos <= 0 || pesoKg <= 0) return 0;
@@ -134,6 +135,7 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
                 naviera: finalNaviera,
                 empaque: finalEmpaque,
                 contractId: contract.id,
+                añoCosecha: contract.añoCosecha,
             });
             onLotAdded();
         } catch (err) {

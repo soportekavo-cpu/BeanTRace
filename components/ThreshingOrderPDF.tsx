@@ -47,6 +47,7 @@ const ThreshingOrderPDF: React.FC<ThreshingOrderPDFProps> = ({ order, receipts, 
                 {isLocalSale ? (
                     <>
                         <p><strong>Cliente:</strong> {clientName || order.clientName || 'N/A'}</p>
+                        <p><strong>Tipo de Café:</strong> {order.tipoCafe || 'N/A'}</p>
                         <p><strong>Lote:</strong> {order.lote || 'N/A'}</p>
                         <p><strong>Tipo de Preparación:</strong> {order.tipoPreparacion || 'N/A'}</p>
                         <p><strong>Descripción:</strong> {order.description || 'N/A'}</p>

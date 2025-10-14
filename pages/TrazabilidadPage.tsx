@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, ContractLot, ThreshingOrder, ThreshingOrderReceipt, PurchaseReceipt, Viñeta, Mezcla, Salida, Rendimiento, Reproceso, MezclaVignetteInput, SalidaReciboInput, SalidaMezclaInput } from '../types';
@@ -98,7 +99,7 @@ const TrazabilidadPage: React.FC = () => {
             } else if (foundVignette) {
                 const destinations: any[] = [];
                 const usedInMezcla = mezclas.filter(m => m.inputVignettesData.some(iv => iv.vignetteId === foundVignette.id));
-                // FIX: Property 'vignetteId' does not exist on type 'Viñeta'. Corrected to use 'id'.
+                // FIX: Property 'id' does not exist on type 'MezclaVignetteInput'. Corrected to use 'vignetteId'.
                 const usedInReproceso = reprocesos.filter(r => r.inputVignettesData.some(iv => iv.id === foundVignette.id));
                 const usedInThreshing = allThreshingOrderReceipts.filter(tor => tor.inputType === 'Viñeta' && tor.receiptId === foundVignette.id);
                 
@@ -227,8 +228,8 @@ const TrazabilidadPage: React.FC = () => {
                     {result.type === 'rendimiento' && (
                         <>
                              <ResultCard title={`Rendimiento: ${result.data.rendimientoNumber}`} color="orange" icon={'RN'}>
-                                <p><strong>Primeras Reales:</strong> {result.data.totalRealPrimeras.toFixed(2)} qqs.</p>
-                                <p><strong>Catadura Real:</strong> {result.data.totalRealCatadura.toFixed(2)} qqs.</p>
+                                <p><strong>Primeras Reales:</strong> {result.data.totalRealPrimeras.toFixed(2)}</p>
+                                <p><strong>Catadura Real:</strong> {result.data.totalRealCatadura.toFixed(2)}</p>
                             </ResultCard>
                             {result.origin && result.origin.length > 0 && <ResultCard title="Origen (Órdenes Liquidadas)" color="blue" icon={<span>&#8592;</span>}>
                                <ul className="list-disc list-inside space-y-1 text-sm">
@@ -287,7 +288,7 @@ const TrazabilidadPage: React.FC = () => {
                         <>
                             <ResultCard title={`Viñeta: ${result.data.numeroViñeta}`} color="red" icon={<span>V</span>}>
                                 <p><strong>Tipo:</strong> {result.data.tipo}</p>
-                                <p><strong>Peso Actual:</strong> {result.data.pesoNeto.toFixed(2)} qqs.</p>
+                                <p><strong>Peso Actual:</strong> {result.data.pesoNeto.toFixed(2)}</p>
                                 <p><strong>Estado:</strong> {result.data.status}</p>
                             </ResultCard>
                             {result.origin && <ResultCard title="Origen" color="blue" icon={<span>&#8592;</span>}>

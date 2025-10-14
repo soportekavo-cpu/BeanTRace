@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, ContractLot, PurchaseReceipt, Viñeta, Mezcla, Salida, Rendimiento, Reproceso, Supplier, ThreshingOrder } from '../types';

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { Mezcla, Viñeta, Rendimiento, Reproceso, MezclaVignetteInput } from '../types';
@@ -35,8 +36,8 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
         if (isEditMode && existingMezcla) {
             const initialVignettes = existingMezcla.inputVignettesData.map(iv => {
                 const originalVignette = combined.find(v => v.id === iv.vignetteId);
-                // FIX: Explicitly cast values to Number before performing arithmetic operations
-                const pesoNetoForEditing = (originalVignette ? (Number(originalVignette.pesoNeto) || 0) : 0) + (Number(iv.pesoUtilizado) || 0);
+                // FIX: Rewrote the calculation for `pesoNetoForEditing` to be more explicit and robust against potential type issues.
+                const pesoNetoForEditing = (Number(originalVignette?.pesoNeto) || 0) + (Number(iv.pesoUtilizado) || 0);
 
                 return {
                     ...(originalVignette || {}),
@@ -182,17 +183,24 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
                 await api.updateDocument<Mezcla>('mezclas', existingMezcla.id, finalMezclaData);
             } else {
                 const allMezclas = await api.getCollection<Mezcla>('mezclas');
-                const maxNum = allMezclas.reduce((max, m) => Math.max(max, parseInt(m.mezclaNumber.split('-')[1]) || 0), 0);
+                const maxNum = allMezclas.reduce((max, m) => {
+                    if (!m.mezclaNumber?.startsWith('Mezcla-')) return max;
+                    const num = parseInt(m.mezclaNumber.split('-')[1]);
+                    return isNaN(num) ? max : Math.max(max, num);
+                }, 0);
                 const mezclaNumber = `Mezcla-${maxNum + 1}`;
-                const data: Omit<Mezcla, 'id'> = {
+
+                const savedMezcla = await api.addDocument<Mezcla>('mezclas', {
                     ...finalMezclaData,
                     mezclaNumber,
                     creationDate: new Date().toISOString().split('T')[0],
-                };
-                const savedMezcla = await api.addDocument<Mezcla>('mezclas', data);
+                });
+                
                 printComponent(<MezclaPDF mezcla={savedMezcla} />, `Mezcla-${savedMezcla.mezclaNumber}`);
             }
+
             onSaveSuccess();
+
         } catch (error) {
             console.error("Error saving mezcla:", error);
             setError('Hubo un error al guardar la mezcla.');
@@ -200,80 +208,83 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
             setIsSaving(false);
         }
     };
-    
+
+    const canSave = !isSaving && selectedVignettes.length > 0 && tipoMezcla.trim() !== '';
+
     return (
         <div className="space-y-6">
             <button onClick={onCancel} className="text-sm font-medium text-green-600 hover:underline">&larr; Volver a Mezclas</button>
-            <h2 className="text-2xl font-bold text-foreground">{isEditMode ? `Editar Mezcla ${existingMezcla?.mezclaNumber}` : 'Crear Nueva Mezcla'}</h2>
+            <h2 className="text-2xl font-bold text-foreground">{isEditMode ? 'Editar Mezcla' : 'Crear Nueva Mezcla'}</h2>
 
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-blue-600 mb-4">1. Viñetas de Entrada</h3>
-                <button onClick={() => setShowVignetteSelector(true)} className="mb-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                <button type="button" onClick={() => setShowVignetteSelector(true)} className="mb-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
                     Seleccionar Viñetas del Inventario
                 </button>
                 {selectedVignettes.length > 0 && (
-                    <table className="w-full text-sm">
-                        <thead><tr className="text-left text-muted-foreground"><th className="p-2">No. Viñeta</th><th className="p-2">Tipo</th><th className="p-2 text-right">Peso Disponible</th><th className="p-2">Peso a Utilizar</th><th></th></tr></thead>
-                        <tbody>
-                            {selectedVignettes.map(v => (
-                                <tr key={v.id} className="border-b">
-                                    <td className="p-2 font-semibold text-red-500">{v.numeroViñeta}</td>
-                                    <td className="p-2">{v.tipo}</td>
-                                    <td className="p-2 text-right">{v.pesoNeto.toFixed(2)}</td>
-                                    <td className="p-2 w-40">
-                                        <input
-                                            type="number"
-                                            value={weightsToUse[v.id] ?? ''}
-                                            onChange={e => handleWeightChange(v.id, e.target.value)}
-                                            max={v.pesoNeto}
-                                            min={0}
-                                            step="0.01"
-                                            className="w-full p-2 border rounded-md bg-background border-input text-right"
-                                        />
-                                    </td>
-                                    <td className="p-2">
-                                        <button onClick={() => handleRemoveVignette(v.id)} className="text-red-500 hover:text-red-700"><TrashIcon className="w-4 h-4" /></button>
-                                    </td>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="text-left text-muted-foreground whitespace-nowrap">
+                                <tr>
+                                    <th className="p-2">No. Viñeta</th>
+                                    <th className="p-2">Tipo</th>
+                                    <th className="p-2 text-right">Disponible</th>
+                                    <th className="p-2">Peso a Utilizar</th>
+                                    <th className="p-2"></th>
                                 </tr>
-                            ))}
-                        </tbody>
-                        <tfoot className="font-bold"><tr><td colSpan={3} className="p-2 text-right">Total a Mezclar:</td><td className="p-2 text-right">{totals.totalInputWeight.toFixed(2)} qqs.</td><td></td></tr></tfoot>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {selectedVignettes.map(v => (
+                                    <tr key={v.id} className="border-b">
+                                        <td className="p-2 font-semibold text-red-500">{v.numeroViñeta}</td>
+                                        <td className="p-2">{v.tipo}</td>
+                                        <td className="p-2 text-right">{v.pesoNeto.toFixed(2)}</td>
+                                        <td className="p-2">
+                                            <input
+                                                type="number"
+                                                value={weightsToUse[v.id] || ''}
+                                                onChange={e => handleWeightChange(v.id, e.target.value)}
+                                                max={v.pesoNeto}
+                                                className="w-full p-1 border rounded-md bg-background border-input text-right"
+                                            />
+                                        </td>
+                                        <td className="p-2">
+                                            <button onClick={() => handleRemoveVignette(v.id)}><TrashIcon className="w-4 h-4 text-red-500"/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
-            
+
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-purple-600 mb-4">2. Información de la Mezcla</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-1">Tipo de Mezcla *</label>
-                        <input type="text" value={tipoMezcla} onChange={e => setTipoMezcla(e.target.value)} className="w-full p-2 border rounded-md bg-background border-input" />
+                        <input
+                            type="text"
+                            value={tipoMezcla}
+                            onChange={e => setTipoMezcla(e.target.value)}
+                            placeholder="Ej: Mezcla para Exportación SHB, Mezcla Local Natural"
+                            className="w-full p-2 border rounded-md bg-background border-input"
+                        />
                     </div>
-                    {isEditMode && (
-                        <div>
-                            <label className="block text-sm font-medium text-muted-foreground mb-1">Cantidad ya Despachada (qqs.)</label>
-                            <p className="p-2 font-bold bg-muted/50 rounded-md min-h-[42px] flex items-center">
-                                {(existingMezcla?.cantidadDespachada || 0).toFixed(2)}
-                            </p>
-                        </div>
-                    )}
-                     <div className={`font-semibold ${!isEditMode ? 'md:col-start-3' : ''}`}>
-                        <p className="text-sm text-muted-foreground">En Bodega</p>
-                        <p className="text-2xl text-green-600 mt-1">{totals.sobrante.toFixed(2)}</p>
-                    </div>
+                     <div className="bg-muted/50 p-4 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Peso Total de la Mezcla</p>
+                        <p className="text-2xl font-bold">{totals.totalInputWeight.toFixed(2)} qqs.</p>
+                     </div>
                 </div>
             </div>
-
-            {error && (
-                <div className="my-4 text-center bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-md" role="alert">
-                    <span className="font-medium">{error}</span>
-                </div>
-            )}
-
+            
+            {error && <p className="text-sm text-center text-red-500">{error}</p>}
+            
             <div className="flex justify-end gap-4 pt-4">
                 <button type="button" onClick={onCancel} className="px-6 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">Cancelar</button>
-                <button type="button" onClick={handleSave} disabled={isSaving} className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-400">
-                     {isSaving ? 'Guardando...' : (isEditMode ? 'Guardar Cambios' : 'Guardar e Imprimir')}
+                <button type="button" onClick={handleSave} disabled={!canSave} className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-400">
+                    {isSaving ? 'Guardando...' : (isEditMode ? 'Guardar Cambios' : 'Guardar y Imprimir')}
                 </button>
             </div>
             
@@ -282,6 +293,7 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, rendimientos, r
                     onClose={() => setShowVignetteSelector(false)} 
                     onSelect={handleSelectVignettes}
                     initialSelectedIds={selectedVignettes.map(v => v.id)}
+                    existingReproceso={null}
                 />
             )}
         </div>

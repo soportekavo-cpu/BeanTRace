@@ -50,6 +50,7 @@ const ThreshingOrderDetailModalLocal: React.FC<ThreshingOrderDetailModalLocalPro
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div><p className="text-muted-foreground">Fecha de Creación</p><p className="font-medium text-foreground">{formatDate(order.creationDate)}</p></div>
                             <div><p className="text-muted-foreground">Cliente</p><p className="font-medium text-foreground">{order.clientName}</p></div>
+                            <div><p className="text-muted-foreground">Tipo de Café</p><p className="font-medium text-foreground">{order.tipoCafe || 'N/A'}</p></div>
                              <div><p className="text-muted-foreground">Lote</p><p className="font-medium text-foreground">{order.lote || 'N/A'}</p></div>
                             <div><p className="text-muted-foreground">Tipo Preparación</p><p className="font-medium text-foreground">{order.tipoPreparacion || 'N/A'}</p></div>
                             <div className="col-span-full"><p className="text-muted-foreground">Descripción</p><p className="font-medium text-foreground">{order.description || 'N/A'}</p></div>

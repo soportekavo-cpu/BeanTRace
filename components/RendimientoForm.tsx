@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { Rendimiento, ThreshingOrder, Viñeta, ByproductType, Contract, ContractLot, Reproceso } from '../types';
@@ -349,8 +350,8 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
                                     <td className="p-2 text-right">{projectedData.totalPrimeras.toFixed(2)}</td>
                                     <td className="p-2 text-right">{realData.totalRealPrimeras.toFixed(2)}</td>
                                     <td className={`p-2 text-right font-bold ${realData.totalRealPrimeras - projectedData.totalPrimeras < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
-                                        {/* FIX: Removed redundant Number() wrapper which caused a type error. */}
-                                        {(realData.totalRealPrimeras - projectedData.totalPrimeras).toFixed(2)}
+                                        {/* FIX: Cast to Number to ensure toFixed method is available. */}
+                                        {(Number(realData.totalRealPrimeras) - Number(projectedData.totalPrimeras)).toFixed(2)}
                                     </td>
                                 </tr>
                                 <tr className="border-b">
@@ -358,8 +359,8 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
                                     <td className="p-2 text-right">{projectedData.totalCatadura.toFixed(2)}</td>
                                     <td className="p-2 text-right">{realData.totalRealCatadura.toFixed(2)}</td>
                                      <td className={`p-2 text-right font-bold ${realData.totalRealCatadura - projectedData.totalCatadura < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
-                                        {/* FIX: Removed redundant Number() wrapper which caused a type error. */}
-                                        {(realData.totalRealCatadura - projectedData.totalCatadura).toFixed(2)}
+                                        {/* FIX: Cast to Number to ensure toFixed method is available. */}
+                                        {(Number(realData.totalRealCatadura) - Number(projectedData.totalCatadura)).toFixed(2)}
                                      </td>
                                 </tr>
                                 <tr className="font-bold bg-muted">

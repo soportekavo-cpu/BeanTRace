@@ -16,6 +16,7 @@ import { printComponent } from '../utils/printUtils';
 import { useAuth } from '../contexts/AuthContext';
 import EditThreshingOrderForm from '../components/EditThreshingOrderForm';
 import ToggleSwitch from '../components/ToggleSwitch';
+import { getCurrentHarvestYear, getHarvestYears } from '../utils/harvestYear';
 
 
 const formatDate = (dateString: string) => {
@@ -691,7 +692,7 @@ const GlobalAlertsBar: React.FC<{
 };
 
 interface ContractsPageProps {
-  onCreateContractClick: () => void;
+  onCreateContractClick: (harvestYear: string) => void;
 }
 
 const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) => {
@@ -706,6 +707,8 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
     const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
     const [contractQqs, setContractQqs] = useState<Map<string, number>>(new Map());
     const [showAll, setShowAll] = useState(false);
+    const [selectedHarvestYear, setSelectedHarvestYear] = useState<string>(getCurrentHarvestYear());
+    const [harvestYears, setHarvestYears] = useState<string[]>([]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -726,6 +729,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
             setLots(lotsData);
             setThreshingOrders(threshingOrdersData);
             setContractQqs(qqsMap);
+            setHarvestYears(getHarvestYears(contractsData));
         } catch (error) {
              console.error("Error fetching data: ", error);
         } finally {
@@ -746,11 +750,12 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
     }, []);
 
     const filteredContracts = useMemo(() => {
-        if (showAll) {
-            return contracts;
-        }
-        return contracts.filter(c => !c.isFinished && !c.isServiceContract);
-    }, [contracts, showAll]);
+        const baseFiltered = showAll
+            ? contracts
+            : contracts.filter(c => !c.isFinished && !c.isServiceContract);
+        
+        return baseFiltered.filter(c => (c.añoCosecha || getCurrentHarvestYear()) === selectedHarvestYear);
+    }, [contracts, showAll, selectedHarvestYear]);
 
 
     const lotsByContractId = useMemo(() => {
@@ -810,10 +815,21 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                 <h2 className="text-2xl font-bold text-foreground">Contratos</h2>
                 <div className="flex items-center gap-4">
                      <div className="flex items-center gap-2">
+                        <label htmlFor="harvestYearSelector" className="text-sm font-medium text-muted-foreground">Cosecha:</label>
+                        <select 
+                            id="harvestYearSelector"
+                            value={selectedHarvestYear} 
+                            onChange={e => setSelectedHarvestYear(e.target.value)}
+                            className="px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm"
+                        >
+                            {harvestYears.map(year => <option key={year} value={year}>{year}</option>)}
+                        </select>
+                    </div>
+                     <div className="flex items-center gap-2">
                         <ToggleSwitch id="showAllContracts" checked={showAll} onChange={setShowAll} />
                         <label htmlFor="showAllContracts" className="text-sm font-medium text-muted-foreground select-none">Mostrar todos</label>
                     </div>
-                    {permissions?.add && <button onClick={onCreateContractClick} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                    {permissions?.add && <button onClick={() => onCreateContractClick(selectedHarvestYear)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
                         <PlusIcon className="w-4 h-4" /> Crear Contrato
                     </button>}
                 </div>

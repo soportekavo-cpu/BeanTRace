@@ -23,6 +23,7 @@ interface InputRow {
 
 const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = ({ order, onCancel, onSaveSuccess }) => {
     const [clientId, setClientId] = useState(order.clientId || '');
+    const [tipoCafe, setTipoCafe] = useState<'Lavado' | 'Natural'>(order.tipoCafe || 'Lavado');
     const [description, setDescription] = useState(order.description || '');
     const [lote, setLote] = useState(order.lote || '');
     const [tipoPreparacion, setTipoPreparacion] = useState(order.tipoPreparacion || '');
@@ -107,14 +108,32 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
         setInputRows(prev => prev.map(row => {
             if (row.id !== rowId) return row;
             
-            let updatedRow = { ...row, [field]: value };
+            let updatedRow: InputRow = { ...row };
             
             const originalAmount = originalReceipts.find(or => or.receiptId === updatedRow.sourceId)?.amountToThresh || 0;
     
-            if (field === 'inputType') {
+            if (field === 'projectedPrimerasPercent' || field === 'projectedCataduraPercent') {
+                let numValue = Math.max(0, Math.min(100, Number(value) || 0));
+                const otherField = field === 'projectedPrimerasPercent' ? 'projectedCataduraPercent' : 'projectedPrimerasPercent';
+                let otherValue = Number(row[otherField]) || 0;
+    
+                if (numValue + otherValue > 100) {
+                    otherValue = 100 - numValue;
+                }
+                
+                updatedRow = {
+                    ...row,
+                    [field]: numValue,
+                    [otherField]: otherValue,
+                };
+            } else if (field === 'inputType') {
+                updatedRow.inputType = value as 'Recibo' | 'Viñeta' | 'Mezcla';
                 updatedRow.sourceId = '';
                 updatedRow.amountToThresh = 0;
+                delete updatedRow.projectedPrimerasPercent;
+                delete updatedRow.projectedCataduraPercent;
             } else if (field === 'sourceId') {
+                updatedRow.sourceId = value as string;
                 let maxAmount = 0;
                 if(updatedRow.inputType === 'Recibo') maxAmount = (Number(availableReceipts.find(r => r.id === value)?.enBodega) || 0) + originalAmount;
                 if(updatedRow.inputType === 'Viñeta') maxAmount = (Number(availableVignettes.find(v => v.id === value)?.pesoNeto) || 0) + originalAmount;
@@ -126,8 +145,12 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                 if(row.inputType === 'Viñeta') maxAmount = (Number(availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto) || 0) + originalAmount;
                 if(row.inputType === 'Mezcla') maxAmount = (Number(availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega) || 0) + originalAmount;
                 if (Number(value) > maxAmount) {
-                    updatedRow[field] = maxAmount;
+                    (updatedRow as any)[field] = maxAmount;
+                } else {
+                    (updatedRow as any)[field] = value;
                 }
+            } else {
+                 (updatedRow as any)[field] = value;
             }
     
             return updatedRow;
@@ -185,8 +208,8 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
     }, [inputRows, availableReceipts, availableVignettes, availableMezclas, suppliers, pesoVendido]);
 
     const handleSave = async () => {
-        if (!clientId || inputRows.some(row => !row.sourceId || Number(row.amountToThresh) <= 0)) {
-            alert('Por favor, selecciona un cliente y asegúrate de que todos los insumos tengan una fuente y una cantidad mayor a cero.');
+        if (!clientId) {
+            alert('Por favor, selecciona un cliente.');
             return;
         }
         setIsSaving(true);
@@ -262,7 +285,7 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
             await Promise.all(addNewReceipts);
 
             await api.updateDocument<ThreshingOrder>('threshingOrders', order.id, {
-                clientId, clientName: clients.find(c => c.id === clientId)?.name || '', description, lote, tipoPreparacion, pesoVendido: parseFloat(pesoVendido) || 0, totalToThresh: calculations.totalToThresh, totalPrimeras: calculations.totalPrimeras, totalCatadura: calculations.totalCatadura,
+                clientId, clientName: clients.find(c => c.id === clientId)?.name || '', description, lote, tipoPreparacion, pesoVendido: parseFloat(pesoVendido) || 0, totalToThresh: calculations.totalToThresh, totalPrimeras: calculations.totalPrimeras, totalCatadura: calculations.totalCatadura, tipoCafe,
             });
 
             onSaveSuccess();
@@ -290,6 +313,13 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                             <select id="clientId" value={clientId} onChange={(e) => setClientId(e.target.value)} required className="w-full p-2 border rounded-md bg-background border-input">
                                 <option value="" disabled>Selecciona un cliente</option>
                                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="tipoCafe" className="block text-sm font-medium text-muted-foreground mb-1">Tipo de Café</label>
+                            <select id="tipoCafe" value={tipoCafe} onChange={(e) => setTipoCafe(e.target.value as 'Lavado' | 'Natural')} className="w-full p-2 border rounded-md bg-background border-input">
+                                <option value="Lavado">Lavado</option>
+                                <option value="Natural">Natural</option>
                             </select>
                         </div>
                         <div>
@@ -342,9 +372,9 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                                         <td className="p-2 align-top">
                                             <select value={row.sourceId} onChange={e => handleRowChange(row.id, 'sourceId', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input">
                                                 <option value="" disabled>Seleccionar...</option>
-                                                {row.inputType === 'Recibo' && availableReceipts.filter(r => !usedSourceIds.has(r.id!) || r.id === row.sourceId).map(r => <option key={r.id} value={r.id}>{`${r.recibo} (${(Number(r.enBodega) + (originalReceipts.find(or => or.receiptId === r.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
-                                                {row.inputType === 'Viñeta' && availableVignettes.filter(v => !usedSourceIds.has(v.id!) || v.id === row.sourceId).map(v => <option key={v.id} value={v.id}>{`${v.numeroViñeta} (${(Number(v.pesoNeto) + (originalReceipts.find(or => or.receiptId === v.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
-                                                {row.inputType === 'Mezcla' && availableMezclas.filter(m => !usedSourceIds.has(m.id!) || m.id === row.sourceId).map(m => <option key={m.id} value={m.id}>{`${m.mezclaNumber} (${(Number(m.sobranteEnBodega) + (originalReceipts.find(or => or.receiptId === m.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
+                                                {row.inputType === 'Recibo' && availableReceipts.filter(r => (!usedSourceIds.has(r.id!) || r.id === row.sourceId) && ((r.gMuestra > 0 && (Number(r.enBodega) || 0) > 0) || r.id === row.sourceId)).map(r => <option key={r.id} value={r.id}>{`${r.recibo} (${( (Number(r.enBodega) || 0) + (originalReceipts.find(or => or.receiptId === r.id)?.amountToThresh || 0) ).toFixed(2)} qqs.)`}</option>)}
+                                                {row.inputType === 'Viñeta' && availableVignettes.filter(v => (!usedSourceIds.has(v.id!) || v.id === row.sourceId)).map(v => <option key={v.id} value={v.id}>{`${v.numeroViñeta} (${(Number(v.pesoNeto) + (originalReceipts.find(or => or.receiptId === v.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
+                                                {row.inputType === 'Mezcla' && availableMezclas.filter(m => (!usedSourceIds.has(m.id!) || m.id === row.sourceId) && (Number(m.sobranteEnBodega) > 0 || m.id === row.sourceId)).map(m => <option key={m.id} value={m.id}>{`${m.mezclaNumber} (${(Number(m.sobranteEnBodega) + (originalReceipts.find(or => or.receiptId === m.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
                                             </select>
                                         </td>
                                         <td className="p-2 align-top text-xs">{row.supplierName}</td>
@@ -363,6 +393,14 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                                 );
                             })}
                         </tbody>
+                        <tfoot className="font-bold bg-muted/50 text-foreground">
+                            <tr className="border-t-2 border-border">
+                                <td colSpan={7} className="p-2 text-right">Totales:</td>
+                                <td className="p-2 text-right">{calculations.totalPrimeras.toFixed(2)}</td>
+                                <td className="p-2 text-right">{calculations.totalCatadura.toFixed(2)}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                  </div>
                   <button onClick={addInputRow} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md">
@@ -370,16 +408,33 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                 </button>
             </div>
             
-            <div className="bg-card border-2 border-green-500/50 rounded-lg shadow-sm p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="font-semibold"><p className="text-muted-foreground text-sm">Necesario (Primeras)</p><p className="text-2xl text-foreground">{(parseFloat(pesoVendido) || 0).toFixed(2)}</p></div>
-                    <div className="font-semibold"><p className="text-muted-foreground text-sm">Producido (Primeras)</p><p className="text-2xl text-foreground">{calculations.totalPrimeras.toFixed(2)}</p></div>
-                    <div className="font-semibold"><p className="text-muted-foreground text-sm">Diferencia para completar orden</p><p className={`text-3xl ${calculations.difference < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{calculations.difference.toFixed(2)}</p></div>
+             <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
+                <h3 className="text-lg font-semibold text-foreground">Resumen de Liquidación</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-muted/50 p-4 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Total a Trillar (Insumos)</p>
+                        <p className="text-2xl font-bold">{calculations.totalToThresh.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-muted/50 p-4 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Total Primeras Producidas</p>
+                        <p className="text-2xl font-bold">{calculations.totalPrimeras.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-muted/50 p-4 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Total Catadura Producida</p>
+                        <p className="text-2xl font-bold">{calculations.totalCatadura.toFixed(2)}</p>
+                    </div>
                 </div>
-                 <div className="pt-4 border-t mt-4 col-span-full grid grid-cols-3 gap-6">
-                    <div><p className="text-muted-foreground text-sm">Total A Trillar</p><p className="text-xl font-bold">{calculations.totalToThresh.toFixed(2)}</p></div>
-                    <div><p className="text-muted-foreground text-sm">Total Primeras</p><p className="text-xl font-bold">{calculations.totalPrimeras.toFixed(2)}</p></div>
-                    <div><p className="text-muted-foreground text-sm">Total Catadura</p><p className="text-xl font-bold">{calculations.totalCatadura.toFixed(2)}</p></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                    <div className="bg-blue-500/10 p-4 rounded-lg">
+                        <p className="text-sm text-blue-800 dark:text-blue-300">Peso Vendido (qqs.)</p>
+                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{(parseFloat(pesoVendido) || 0).toFixed(2)}</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${calculations.difference < -0.005 ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
+                        <p className={`text-sm ${calculations.difference < -0.005 ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>Diferencia para completar orden</p>
+                        <p className={`text-4xl font-bold ${calculations.difference < -0.005 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                            {calculations.difference.toFixed(2)}
+                        </p>
+                    </div>
                 </div>
             </div>
 

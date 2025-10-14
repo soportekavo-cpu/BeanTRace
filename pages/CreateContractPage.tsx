@@ -3,10 +3,12 @@ import api from '../services/localStorageManager';
 import { Contract, Exporter, Buyer } from '../types';
 import CheckIcon from '../components/icons/CheckIcon';
 import ToggleSwitch from '../components/ToggleSwitch';
+import { getCurrentHarvestYear } from '../utils/harvestYear';
 
 interface CreateContractPageProps {
   onCancel: () => void;
   onSaveSuccess: () => void;
+  harvestYear: string;
 }
 
 const InputField: React.FC<{ label: string, id: string, type?: string, value: string | number, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, required?: boolean, placeholder?: string }> = 
@@ -42,7 +44,7 @@ const getSuggestedMarketMonth = () => {
 };
 
 
-const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSaveSuccess }) => {
+const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSaveSuccess, harvestYear }) => {
   const [contractNumber, setContractNumber] = useState('');
   const [exporterId, setExporterId] = useState('');
   const [buyerId, setBuyerId] = useState('');
@@ -126,6 +128,7 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         isFinished,
         certifications,
         isServiceContract,
+        añoCosecha: harvestYear,
       };
 
       await api.addDocument<Contract>('contracts', newContract);

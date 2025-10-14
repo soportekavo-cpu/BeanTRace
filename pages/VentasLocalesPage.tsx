@@ -196,6 +196,7 @@ const VentasLocalesPage: React.FC = () => {
                             <th scope="col" className="px-6 py-3">No. Orden</th>
                             <th scope="col" className="px-6 py-3">Cliente</th>
                             <th scope="col" className="px-6 py-3">Lote</th>
+                            <th scope="col" className="px-6 py-3">Tipo Café</th>
                             <th scope="col" className="px-6 py-3 text-right">Peso Vendido (qqs.)</th>
                             <th scope="col" className="px-6 py-3 text-right">Producido (qqs.)</th>
                             <th scope="col" className="px-6 py-3 text-right">Diferencia</th>
@@ -204,7 +205,7 @@ const VentasLocalesPage: React.FC = () => {
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={8} className="text-center py-10">Cargando...</td></tr>
+                            <tr><td colSpan={9} className="text-center py-10">Cargando...</td></tr>
                         ) : orders.length > 0 ? (
                             orders.map(order => {
                                 const difference = order.totalPrimeras - (order.pesoVendido || 0);
@@ -214,6 +215,7 @@ const VentasLocalesPage: React.FC = () => {
                                     <td className="px-6 py-4 font-medium text-foreground">{order.orderNumber}</td>
                                     <td className="px-6 py-4">{order.clientName}</td>
                                     <td className="px-6 py-4">{order.lote}</td>
+                                    <td className="px-6 py-4">{order.tipoCafe || 'N/A'}</td>
                                     <td className="px-6 py-4 text-right">{(order.pesoVendido || 0).toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right">{order.totalPrimeras.toFixed(2)}</td>
                                     <td className={`px-6 py-4 text-right font-bold ${difference < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
@@ -229,7 +231,7 @@ const VentasLocalesPage: React.FC = () => {
                                 </tr>
                             )})
                         ) : (
-                             <tr><td colSpan={8} className="text-center py-10">No hay ventas locales para mostrar.</td></tr>
+                             <tr><td colSpan={9} className="text-center py-10">No hay ventas locales para mostrar.</td></tr>
                         )}
                     </tbody>
                 </table>

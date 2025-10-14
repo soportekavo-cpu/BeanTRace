@@ -10,13 +10,12 @@ import SettingsIcon from '../components/icons/SettingsIcon';
 import ReceiptIcon from '../components/icons/ReceiptIcon';
 import BarChartIcon from '../components/icons/BarChartIcon';
 import PackageIcon from '../components/icons/PackageIcon';
-import DollarSignIcon from '../components/icons/DollarSignIcon';
 import ChevronDownIcon from '../components/icons/ChevronDownIcon';
 import MixIcon from '../components/icons/MixIcon';
 import TruckIcon from '../components/icons/TruckIcon';
 import SearchIcon from '../components/icons/SearchIcon';
+import ClipboardListIcon from '../components/icons/ClipboardListIcon';
 
-// FIX: File 'file:///pages/DashboardPage.tsx' is not a module.
 import DashboardPage from './DashboardPage';
 import ContractsPage from './ContractsPage';
 import CreateContractPage from './CreateContractPage';
@@ -28,6 +27,7 @@ import VentasLocalesPage from './VentasLocalesPage';
 import MezclasPage from './MezclasPage';
 import SalidasPage from './SalidasPage';
 import TrazabilidadPage from './TrazabilidadPage';
+import { getCurrentHarvestYear } from '../utils/harvestYear';
 
 type Page = 'dashboard' | 'contracts' | 'ventasLocales' | 'ingreso' | 'rendimientos' | 'mezclas' | 'salidas' | 'trazabilidad' | 'entities' | 'admin';
 
@@ -49,11 +49,13 @@ const DashboardLayout: React.FC = () => {
     const { theme, toggleTheme } = useTheme();
     const [activePage, setActivePage] = useState<Page>('dashboard');
     const [view, setView] = useState<'list' | 'createContract'>('list');
-    const [isSalesOpen, setIsSalesOpen] = useState(false);
+    const [harvestYearForCreation, setHarvestYearForCreation] = useState<string>(getCurrentHarvestYear());
+    const [isSalesOpen, setIsSalesOpen] = useState(true);
 
-    const handleCreateContractClick = () => {
+    const handleCreateContractClick = (harvestYear: string) => {
         setActivePage('contracts');
         setView('createContract');
+        setHarvestYearForCreation(harvestYear);
     };
 
     const handleSaveContractSuccess = () => {
@@ -66,6 +68,10 @@ const DashboardLayout: React.FC = () => {
 
     const NavLink: React.FC<{ pageId: Page; label: string; children: ReactNode; isSubItem?: boolean }> = ({ pageId, label, children, isSubItem = false }) => {
         const isActive = activePage === pageId;
+        const hasPermission = roleDetails?.permissions[pageId]?.view ?? false;
+
+        if (!hasPermission) return null;
+
         return (
             <button
                 onClick={() => {
@@ -88,7 +94,7 @@ const DashboardLayout: React.FC = () => {
 
     const ActivePageComponent = () => {
         if (activePage === 'contracts' && view === 'createContract') {
-            return <CreateContractPage onCancel={handleCancelCreateContract} onSaveSuccess={handleSaveContractSuccess} />;
+            return <CreateContractPage onCancel={handleCancelCreateContract} onSaveSuccess={handleSaveContractSuccess} harvestYear={harvestYearForCreation} />;
         }
         
         const PageComponent = allPages[activePage];
@@ -105,19 +111,15 @@ const DashboardLayout: React.FC = () => {
     return (
         <div className="flex h-screen bg-background text-foreground">
             {/* Sidebar */}
-            <aside className="w-64 flex-shrink-0 border-r border-border flex flex-col">
-                <div className="h-16 flex items-center justify-center border-b border-border">
+            <aside className="w-64 flex flex-col border-r border-border bg-card">
+                <div className="flex items-center justify-center h-16 border-b border-border flex-shrink-0">
                     <h1 className="text-xl font-bold text-green-600">BeanTrace</h1>
                 </div>
-                <nav className="flex-1 p-4 space-y-1">
-                    {roleDetails?.permissions.dashboard?.view && (
-                        <NavLink pageId="dashboard" label="Dashboard">
-                            <HomeIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-
+                <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                    <NavLink pageId="dashboard" label="Dashboard"><HomeIcon className="w-5 h-5" /></NavLink>
+                    
                     {(roleDetails?.permissions.contracts?.view || roleDetails?.permissions.ventasLocales?.view) && (
-                        <div className="space-y-1">
+                        <div>
                             <button
                                 onClick={() => setIsSalesOpen(!isSalesOpen)}
                                 className="flex items-center justify-between w-full px-4 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -126,84 +128,55 @@ const DashboardLayout: React.FC = () => {
                                     <PackageIcon className="w-5 h-5" />
                                     <span className="ml-3">Ventas</span>
                                 </div>
-                                <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSalesOpen ? 'rotate-180' : ''}`} />
+                                <ChevronDownIcon className={`w-5 h-5 transition-transform ${isSalesOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {isSalesOpen && (
-                                <div className="pt-1 space-y-1">
-                                    {roleDetails?.permissions.contracts?.view && (
-                                        <NavLink pageId="contracts" label="Exportaciones" isSubItem>
-                                            <FileTextIcon className="w-4 h-4" />
-                                        </NavLink>
-                                    )}
-                                    {roleDetails?.permissions.ventasLocales?.view && (
-                                        <NavLink pageId="ventasLocales" label="Ventas Locales" isSubItem>
-                                            <PackageIcon className="w-4 h-4" />
-                                        </NavLink>
-                                    )}
+                                <div className="pl-4 mt-1 space-y-1">
+                                    <NavLink pageId="contracts" label="Exportación" isSubItem><FileTextIcon className="w-5 h-5" /></NavLink>
+                                    <NavLink pageId="ventasLocales" label="Venta Local" isSubItem><ClipboardListIcon className="w-5 h-5" /></NavLink>
                                 </div>
                             )}
                         </div>
                     )}
 
-                    {roleDetails?.permissions.ingreso?.view && (
-                        <NavLink pageId="ingreso" label="Ingreso Café">
-                            <ReceiptIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-                    {roleDetails?.permissions.rendimientos?.view && (
-                         <NavLink pageId="rendimientos" label="Rendimientos">
-                            <BarChartIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-                     {roleDetails?.permissions.mezclas?.view && (
-                         <NavLink pageId="mezclas" label="Mezclas">
-                            <MixIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-                    {roleDetails?.permissions.salidas?.view && (
-                         <NavLink pageId="salidas" label="Salidas">
-                            <TruckIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-                     {roleDetails?.permissions.trazabilidad?.view && (
-                         <NavLink pageId="trazabilidad" label="Trazabilidad">
-                            <SearchIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-                    {roleDetails?.permissions.entities?.view && (
-                         <NavLink pageId="entities" label="Entidades">
-                            <BriefcaseIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
-                    {roleDetails?.permissions.admin?.view && (
-                        <NavLink pageId="admin" label="Administración">
-                            <SettingsIcon className="w-5 h-5" />
-                        </NavLink>
-                    )}
+                    <NavLink pageId="ingreso" label="Ingreso de Café"><ReceiptIcon className="w-5 h-5" /></NavLink>
+                    <NavLink pageId="rendimientos" label="Rendimientos"><BarChartIcon className="w-5 h-5" /></NavLink>
+                    <NavLink pageId="mezclas" label="Mezclas"><MixIcon className="w-5 h-5" /></NavLink>
+                    <NavLink pageId="salidas" label="Salidas"><TruckIcon className="w-5 h-5" /></NavLink>
+                    <NavLink pageId="trazabilidad" label="Trazabilidad"><SearchIcon className="w-5 h-5" /></NavLink>
+                    
+                    <div className="pt-4 mt-2 border-t">
+                        <NavLink pageId="entities" label="Entidades"><BriefcaseIcon className="w-5 h-5" /></NavLink>
+                        <NavLink pageId="admin" label="Administración"><SettingsIcon className="w-5 h-5" /></NavLink>
+                    </div>
                 </nav>
             </aside>
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <header className="h-16 flex items-center justify-between px-6 border-b border-border flex-shrink-0">
-                    <div></div>
+            {/* Main content */}
+            <main className="flex-1 flex flex-col">
+                {/* Header */}
+                <header className="flex-shrink-0 flex items-center justify-between h-16 px-6 border-b border-border">
+                    <div>
+                        {/* Can be used for breadcrumbs or page title */}
+                    </div>
                     <div className="flex items-center gap-4">
-                        <button onClick={toggleTheme} className="text-muted-foreground hover:text-foreground">
+                        <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-muted">
                             {theme === 'light' ? <MoonIcon className="w-5 h-5" /> : <SunIcon className="w-5 h-5" />}
                         </button>
-                        <div className="text-sm">
-                            <div className="font-medium">{user?.email}</div>
-                            <div className="text-xs text-muted-foreground">{roleDetails?.name}</div>
+                        <div className="text-right">
+                            <p className="font-semibold text-sm">{user?.email}</p>
+                            <p className="text-xs text-muted-foreground">{roleDetails?.name}</p>
                         </div>
-                        <button onClick={logout} className="text-sm font-medium text-red-500 hover:underline">
+                        <button onClick={logout} className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">
                             Salir
                         </button>
                     </div>
                 </header>
-                <main className="flex-1 overflow-y-auto p-6 md:p-8">
+                {/* Page content */}
+                <div className="flex-1 p-6 overflow-y-auto">
                     <ActivePageComponent />
-                </main>
-            </div>
+                </div>
+            </main>
         </div>
     );
 };

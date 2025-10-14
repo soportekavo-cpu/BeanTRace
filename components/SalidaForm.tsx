@@ -104,7 +104,7 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
         } else if (field === 'pesoUtilizado') {
             const selectedMezclaInfo = availableMezclas.find(am => am.id === currentMezcla.mezclaId);
             const oldUsage = isEditMode ? existingSalida?.mezclas?.find(em => em.mezclaId === currentMezcla.mezclaId)?.pesoUtilizado || 0 : 0;
-            const maxWeight = (selectedMezclaInfo?.sobranteEnBodega || 0) + oldUsage;
+            const maxWeight = (Number(selectedMezclaInfo?.sobranteEnBodega) || 0) + oldUsage;
             updated[index] = { ...currentMezcla, pesoUtilizado: Math.min(Number(value), maxWeight) };
         } else {
             updated[index] = { ...currentMezcla, [field]: value };
@@ -127,7 +127,7 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
         } else if (field === 'pesoDevuelto') {
             const selectedReciboInfo = availableReceipts.find(r => r.id === currentRecibo.reciboId);
             const oldUsage = isEditMode ? existingSalida?.recibos?.find(er => er.reciboId === currentRecibo.reciboId)?.pesoDevuelto || 0 : 0;
-            const maxWeight = (selectedReciboInfo?.enBodega || 0) + oldUsage;
+            const maxWeight = (Number(selectedReciboInfo?.enBodega) || 0) + oldUsage;
             updated[index] = { ...currentRecibo, pesoDevuelto: Math.min(Number(value), maxWeight) };
         } else {
             updated[index] = { ...currentRecibo, [field]: value };
@@ -188,8 +188,9 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
                     if (diff === 0) continue;
                     const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) - diff;
                     const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : 'Despachado Parcialmente';
+                    // FIX: Explicitly cast values to Number to ensure correct arithmetic operations.
                     await api.updateDocument<Mezcla>('mezclas', id, { 
-                        cantidadDespachada: (Number(mezcla.cantidadDespachada) || 0) + diff, 
+                        cantidadDespachada: (Number(mezcla.cantidadDespachada) || 0) + Number(diff), 
                         sobranteEnBodega: newSobrante,
                         status: newStatus
                     });
@@ -215,8 +216,8 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
                     if (!recibo) continue;
                     const diff = (newReciboUsage.get(id) || 0) - (oldReciboUsage.get(id) || 0);
                     if (diff === 0) continue;
-                    // FIX: Explicitly cast values to Number before arithmetic operation
-                    await api.updateDocument<PurchaseReceipt>('purchaseReceipts', id, { devuelto: (Number(recibo.devuelto) || 0) + diff, enBodega: (Number(recibo.enBodega) || 0) - diff });
+                    // FIX: Explicitly cast values to Number before arithmetic operation to prevent type errors.
+                    await api.updateDocument<PurchaseReceipt>('purchaseReceipts', id, { devuelto: (Number(recibo.devuelto) || 0) + Number(diff), enBodega: (Number(recibo.enBodega) || 0) - Number(diff) });
                 }
             }
 
@@ -294,7 +295,7 @@ const SalidaForm: React.FC<SalidaFormProps> = ({ existingSalida, tipoSalida, onC
                                 {formState.selectedRecibos.map((r, index) => {
                                     const selectedReciboInfo = availableReceipts.find(ar => ar.id === r.reciboId);
                                     const oldUsage = isEditMode ? existingSalida?.recibos?.find(er => er.reciboId === r.reciboId)?.pesoDevuelto || 0 : 0;
-                                    const maxWeight = (selectedReciboInfo?.enBodega || 0) + oldUsage;
+                                    const maxWeight = (Number(selectedReciboInfo?.enBodega) || 0) + oldUsage;
                                     return (
                                         <tr key={index}>
                                             <td className="pr-2 align-top">

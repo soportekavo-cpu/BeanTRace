@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect } from 'react';
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
 import { AppUser, AppRole, PagePermissions, AppUserRole } from '../types';
@@ -9,8 +11,9 @@ import PlusIcon from '../components/icons/PlusIcon';
 import { useAuth } from '../contexts/AuthContext';
 import CoffeeTypesPage from '../components/CoffeeTypesPage';
 import ByproductTypesPage from '../components/ByproductTypesPage';
+import LogsTab from '../components/LogsTab';
 
-type AdminTab = 'users' | 'roles' | 'coffeeTypes' | 'byproducts';
+type AdminTab = 'users' | 'roles' | 'coffeeTypes' | 'byproducts' | 'logs';
 
 const manageablePages = [
     { id: 'dashboard', name: 'Dashboard' },
@@ -25,6 +28,7 @@ const manageablePages = [
     { id: 'admin', name: 'Administración' },
     { id: 'coffeeTypes', name: 'Tipos de Café' },
     { id: 'byproducts', name: 'Tipos de Sub Productos' },
+    { id: 'logs', name: 'Bitácora de Actividad' },
 ];
 
 const defaultPermissions: PagePermissions = { view: false, add: false, edit: false, delete: false, viewCosts: false, viewAnalysis: false };
@@ -271,6 +275,7 @@ const AdminPage: React.FC = () => {
                     <TabButton tab="roles" label="Gestionar Roles" />
                     <TabButton tab="coffeeTypes" label="Tipos de Café" />
                     <TabButton tab="byproducts" label="Tipos de Sub Productos" />
+                    <TabButton tab="logs" label="Bitácora de Actividad" />
                 </nav>
             </div>
             <div className="p-6">
@@ -278,6 +283,7 @@ const AdminPage: React.FC = () => {
                 {activeTab === 'roles' && <RoleManagement />}
                 {activeTab === 'coffeeTypes' && <CoffeeTypesPage />}
                 {activeTab === 'byproducts' && <ByproductTypesPage />}
+                {activeTab === 'logs' && <LogsTab />}
             </div>
         </div>
     );

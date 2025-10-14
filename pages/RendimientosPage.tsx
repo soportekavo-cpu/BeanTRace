@@ -594,53 +594,59 @@ const TraceabilityModal: React.FC<{ vignette: any; onClose: () => void; }> = ({ 
             </div>
             <div className="space-y-4 text-sm">
                 <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="font-semibold">Proviene del {vignette.originType}</p>
-                    <p className="text-muted-foreground">
-                        {vignette.originType === 'Rendimiento' ? `Rendimiento: ${vignette.rendimientoNumber}` : `Reproceso: ${vignette.reprocesoNumber}`}
-                    </p>
-                    <p className="text-muted-foreground">Creado el: {formatDate(vignette.creationDate)}</p>
+                    <p className="font-semibold">Información de Origen:</p>
+                    <p><strong>Tipo de Origen:</strong> {vignette.originType}</p>
+                    <p><strong>Documento de Origen:</strong> {vignette.rendimientoNumber || vignette.reprocesoNumber}</p>
+                    <p><strong>Fecha de Creación:</strong> {formatDate(vignette.creationDate)}</p>
                 </div>
+                {vignette.orderNumber && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                        <p className="font-semibold">Orden de Trilla Asociada:</p>
+                        <p><strong>No. Orden:</strong> {vignette.orderNumber}</p>
+                        {vignette.contract && <p><strong>Contrato:</strong> {vignette.contract.contractNumber}</p>}
+                        {vignette.client && <p><strong>Cliente:</strong> {vignette.client.name}</p>}
+                    </div>
+                )}
                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="font-semibold">Generado por la Orden de Trilla</p>
-                    <p className="text-muted-foreground">{vignette.orderNumber || 'N/A (Reproceso)'}</p>
-                    {vignette.lot && <p className="text-muted-foreground">Partidas Asociadas: {vignette.lot.partida}</p>}
-                </div>
-                <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="font-semibold">Asociada a</p>
-                    {vignette.contract && <p className="text-muted-foreground">Contrato: {vignette.contract.contractNumber} para {vignette.contract.buyerName}</p>}
-                    {vignette.client && <p className="text-muted-foreground">Venta Local para: {vignette.client.name}</p>}
-                    {vignette.contract && <p className="text-muted-foreground">Tipo de Café: {vignette.contract.coffeeType}</p>}
+                    <p className="font-semibold">Información Actual:</p>
+                    <p><strong>Tipo:</strong> {vignette.tipo}</p>
+                    <p><strong>Peso Original:</strong> {(vignette.originalPesoNeto || vignette.pesoNeto).toFixed(2)} qqs.</p>
+                    <p><strong>Peso Actual:</strong> {vignette.pesoNeto.toFixed(2)} qqs.</p>
+                    <p><strong>Estado:</strong> <StatusBadge status={vignette.status} /></p>
                 </div>
             </div>
-             <div className="mt-6 flex justify-end">
-                <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-md border">Cerrar</button>
+            <div className="mt-6 flex justify-end">
+                <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-md border hover:bg-muted">Cerrar</button>
             </div>
         </div>
     </div>
 );
 
-
-// Confirm Delete Modal (Generic)
-const ConfirmDeleteModal: React.FC<{ type: 'Rendimiento' | 'Reproceso', item: any, onCancel: () => void, onConfirm: () => void }> = ({ type, item, onCancel, onConfirm }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center">
-        <div className="bg-card p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
-            <h3 className="text-lg font-bold text-foreground">
-                {type === 'Reproceso' ? 'Confirmar Eliminación' : 'Confirmar Anulación'}
-            </h3>
-            <p className="text-muted-foreground mt-2 text-sm" dangerouslySetInnerHTML={{ __html:
-                type === 'Reproceso'
-                ? `¿Estás seguro de eliminar el reproceso <strong>${item.reprocesoNumber}</strong>? Las viñetas de entrada volverán a estar disponibles en inventario. Esta acción no se puede deshacer.`
-                : `¿Estás seguro de anular el ${type.toLowerCase()} <strong>${item.rendimientoNumber || item.reprocesoNumber}</strong>? Esta acción no se puede deshacer.`
-            }}/>
-            <div className="mt-6 flex justify-end gap-4">
-                <button onClick={onCancel} className="px-4 py-2 text-sm font-medium rounded-md border">Cancelar</button>
-                <button onClick={onConfirm} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md">
-                    {type === 'Reproceso' ? 'Eliminar Reproceso' : `Anular ${type}`}
-                </button>
+const ConfirmDeleteModal: React.FC<{
+    type: 'Rendimiento' | 'Reproceso';
+    item: Rendimiento | Reproceso;
+    onCancel: () => void;
+    onConfirm: () => void;
+}> = ({ type, item, onCancel, onConfirm }) => {
+    const number = type === 'Rendimiento' ? (item as Rendimiento).rendimientoNumber : (item as Reproceso).reprocesoNumber;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" aria-modal="true" role="dialog">
+            <div className="bg-card p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+                <h3 className="text-lg font-bold text-foreground">Confirmar Anulación</h3>
+                <p className="text-muted-foreground mt-2 text-sm">
+                    ¿Estás seguro de anular el {type.toLowerCase()} <strong>{number}</strong>? Esta acción revertirá el estado de las viñetas involucradas.
+                </p>
+                <div className="mt-6 flex justify-end gap-4">
+                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">
+                        Cancelar
+                    </button>
+                    <button onClick={onConfirm} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                        Anular {type}
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
-);
-
+    );
+};
 
 export default RendimientosPage;

@@ -1,3 +1,4 @@
+// FIX: Removed self-import of `PagePermissions` which was causing a conflict with the local interface definition.
 export interface PagePermissions {
     view: boolean;
     add: boolean;
@@ -5,6 +6,15 @@ export interface PagePermissions {
     delete: boolean;
     viewCosts?: boolean;
     viewAnalysis?: boolean;
+}
+
+export interface Log {
+    id: string;
+    timestamp: string;
+    userEmail: string;
+    action: 'CREACIÓN' | 'MODIFICACIÓN' | 'ANULACIÓN' | 'ELIMINACIÓN';
+    module: string;
+    description: string;
 }
 
 export interface AppRole {
@@ -74,6 +84,7 @@ export interface Contract {
     isFinished: boolean;
     certifications: string[];
     isServiceContract?: boolean;
+    añoCosecha?: string;
 }
 
 export interface ContractLot {
@@ -96,6 +107,7 @@ export interface ContractLot {
     booking: string;
     naviera: string;
     valorCobro: number;
+    añoCosecha?: string;
 }
 
 export interface CuppingProfile {
@@ -164,6 +176,7 @@ export interface ThreshingOrder {
     lote?: string;
     tipoPreparacion?: string;
     pesoVendido?: number;
+    tipoCafe?: 'Lavado' | 'Natural';
 }
 
 export interface ThreshingOrderReceipt {

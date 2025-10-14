@@ -28,7 +28,7 @@ const AlertsWidget: React.FC<{ data: DashboardData; onWidgetClick: (type: string
         };
 
         const upcomingShipments = contracts.filter(c => {
-            if (c.isFinished || !c.shipmentMonth) return false;
+            if (c.isFinished || c.isServiceContract || !c.shipmentMonth) return false;
             const parts = c.shipmentMonth.toLowerCase().split(' ');
             if (parts.length < 1) return false;
 

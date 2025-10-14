@@ -1,5 +1,8 @@
 
 
+
+
+
 import React, { useState, useEffect } from 'react';
 // FIX: The `services/firebase.ts` file is deprecated. Replaced Firebase logic with `localStorageManager`.
 import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
@@ -46,8 +49,8 @@ const BuyersPage: React.FC = () => {
         
         setIsAdding(true);
         try {
-            // FIX: Replaced Firebase addDoc with localStorageManager addDocument.
-            // Provided empty strings for other required fields to satisfy the Buyer type.
+            // FIX: Corrected the generic type for `api.addDocument` from `Omit<Buyer, 'id'>` to `Buyer`.
+            // The generic type `T` in `addDocument<T>` must extend `{ id?: string }`, and `Omit<Buyer, 'id'>` does not have an `id` property, whereas `Buyer` does.
             await api.addDocument<Buyer>("buyers", { 
                 name: newBuyerName.trim(),
                 address: '',

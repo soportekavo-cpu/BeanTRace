@@ -121,15 +121,31 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
     const handleRowChange = (rowId: string, field: keyof InputRow, value: string | number) => {
         setInputRows(prev => prev.map(row => {
             if (row.id !== rowId) return row;
-            
-            let updatedRow = { ...row, [field]: value };
     
-            if (field === 'inputType') {
+            let updatedRow: InputRow = { ...row };
+    
+            if (field === 'projectedPrimerasPercent' || field === 'projectedCataduraPercent') {
+                let numValue = Math.max(0, Math.min(100, Number(value) || 0));
+                const otherField = field === 'projectedPrimerasPercent' ? 'projectedCataduraPercent' : 'projectedPrimerasPercent';
+                let otherValue = Number(row[otherField]) || 0;
+    
+                if (numValue + otherValue > 100) {
+                    otherValue = 100 - numValue;
+                }
+                
+                updatedRow = {
+                    ...row,
+                    [field]: numValue,
+                    [otherField]: otherValue,
+                };
+            } else if (field === 'inputType') {
+                updatedRow.inputType = value as 'Recibo' | 'Viñeta' | 'Mezcla';
                 updatedRow.sourceId = '';
                 updatedRow.amountToThresh = 0;
                 delete updatedRow.projectedPrimerasPercent;
                 delete updatedRow.projectedCataduraPercent;
             } else if (field === 'sourceId') {
+                updatedRow.sourceId = value as string;
                 let maxAmount = 0;
                 const originalAmount = originalReceipts.find(or => or.receiptId === value)?.amountToThresh || 0;
                 if(updatedRow.inputType === 'Recibo') maxAmount = (availableReceipts.find(r => r.id === value)?.enBodega || 0) + originalAmount;
@@ -142,10 +158,11 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                 if(row.inputType === 'Recibo') maxAmount = (availableReceipts.find(r => r.id === row.sourceId)?.enBodega || 0) + originalAmount;
                 if(row.inputType === 'Viñeta') maxAmount = (availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto || 0) + originalAmount;
                 if(row.inputType === 'Mezcla') maxAmount = (availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega || 0) + originalAmount;
-
-                if (Number(value) > maxAmount) {
-                    updatedRow[field] = maxAmount;
-                }
+                
+                const newAmount = Number(value);
+                updatedRow.amountToThresh = newAmount > maxAmount ? maxAmount : newAmount;
+            } else {
+                (updatedRow as any)[field] = value;
             }
     
             return updatedRow;
@@ -175,8 +192,10 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
             if (row.inputType === 'Recibo') {
                 const receipt = availableReceipts.find(r => r.id === row.sourceId);
                 if (receipt) {
-                    primeras = amount * ((Number(receipt.rendimientoPrimera) || 0) / 100);
-                    catadura = amount * ((Number(receipt.rendimientoRechazo) || 0) / 100);
+                    // FIX: Explicitly cast to Number to avoid potential type errors with arithmetic operations.
+                    primeras = amount * (Number(receipt.rendimientoPrimera) / 100);
+                    // FIX: Explicitly cast to Number to avoid potential type errors with arithmetic operations.
+                    catadura = amount * (Number(receipt.rendimientoRechazo) / 100);
                     sourceInfo = {
                         supplierName: suppliers.find(s => s.id === receipt.proveedorId)?.name || 'N/A',
                         coffeeType: receipt.tipo === 'Otro' ? receipt.customTipo : receipt.tipo
@@ -381,7 +400,7 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                                             <td className="p-2 align-top">
                                                 <select value={row.sourceId} onChange={e => handleRowChange(row.id, 'sourceId', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input">
                                                     <option value="" disabled>Seleccionar...</option>
-                                                    {row.inputType === 'Recibo' && availableReceipts.filter(r => (!usedSourceIds.has(r.id!) || r.id === row.sourceId) && ((Number(r.enBodega) || 0) > 0 || r.id === row.sourceId)).map(r => <option key={r.id} value={r.id}>{`${r.recibo} (${( (Number(r.enBodega) || 0) + (originalReceipts.find(or => or.receiptId === r.id)?.amountToThresh || 0) ).toFixed(2)} qqs.)`}</option>)}
+                                                    {row.inputType === 'Recibo' && availableReceipts.filter(r => (!usedSourceIds.has(r.id!) || r.id === row.sourceId) && ((r.gMuestra > 0 && (Number(r.enBodega) || 0) > 0) || r.id === row.sourceId)).map(r => <option key={r.id} value={r.id}>{`${r.recibo} (${( (Number(r.enBodega) || 0) + (originalReceipts.find(or => or.receiptId === r.id)?.amountToThresh || 0) ).toFixed(2)} qqs.)`}</option>)}
                                                     {row.inputType === 'Viñeta' && availableVignettes.filter(v => (!usedSourceIds.has(v.id!) || v.id === row.sourceId)).map(v => <option key={v.id} value={v.id}>{`${v.numeroViñeta} (${(Number(v.pesoNeto) + (originalReceipts.find(or => or.receiptId === v.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
                                                     {row.inputType === 'Mezcla' && availableMezclas.filter(m => (!usedSourceIds.has(m.id!) || m.id === row.sourceId) && (Number(m.sobranteEnBodega) > 0 || m.id === row.sourceId)).map(m => <option key={m.id} value={m.id}>{`${m.mezclaNumber} (${(Number(m.sobranteEnBodega) + (originalReceipts.find(or => or.receiptId === m.id)?.amountToThresh || 0)).toFixed(2)} qqs.)`}</option>)}
                                                 </select>
@@ -391,8 +410,8 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                                             <td className="p-2 align-top"><input type="number" value={row.amountToThresh} onChange={e => handleRowChange(row.id, 'amountToThresh', e.target.value)} max={maxAmount} disabled={!row.sourceId} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
                                             {row.inputType !== 'Recibo' ? (
                                                 <>
-                                                    <td className="p-2 align-top"><input type="number" placeholder="% 1ras" value={row.projectedPrimerasPercent || ''} onChange={e => handleRowChange(row.id, 'projectedPrimerasPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
-                                                    <td className="p-2 align-top"><input type="number" placeholder="% Cata." value={row.projectedCataduraPercent || ''} onChange={e => handleRowChange(row.id, 'projectedCataduraPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                                    <td className="p-2 align-top"><input type="number" placeholder="% 1ras" value={row.projectedPrimerasPercent ?? ''} onChange={e => handleRowChange(row.id, 'projectedPrimerasPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                                    <td className="p-2 align-top"><input type="number" placeholder="% Cata." value={row.projectedCataduraPercent ?? ''} onChange={e => handleRowChange(row.id, 'projectedCataduraPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
                                                 </>
                                             ) : <td colSpan={2} className="p-2 text-center text-muted-foreground text-xs align-middle">Automático</td>}
                                             <td className="p-2 align-top text-right font-medium">{row.primeras.toFixed(2)}</td>
@@ -402,6 +421,14 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                                     );
                                 })}
                             </tbody>
+                             <tfoot className="font-bold bg-muted/50 text-foreground">
+                                <tr className="border-t-2 border-border">
+                                    <td colSpan={7} className="p-2 text-right">Totales:</td>
+                                    <td className="p-2 text-right">{calculations.totalPrimeras.toFixed(2)}</td>
+                                    <td className="p-2 text-right">{calculations.totalCatadura.toFixed(2)}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
                         </table>
                      </div>
                       <button onClick={addInputRow} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md">
@@ -411,14 +438,36 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
             )}
             
              {selectedLotIds.size > 0 && (
-                <div className="bg-card border-2 border-green-500/50 rounded-lg shadow-sm p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div className="font-semibold"><p className="text-muted-foreground text-sm">Necesario (Primeras)</p><p className="text-2xl text-foreground">{calculations.neededPrimeras.toFixed(2)}</p></div>
-                    <div className="font-semibold"><p className="text-muted-foreground text-sm">Producido (Primeras)</p><p className="text-2xl text-foreground">{calculations.totalPrimeras.toFixed(2)}</p></div>
-                    <div className="font-semibold col-span-2"><p className="text-muted-foreground text-sm">Diferencia para completar orden</p><p className={`text-3xl ${calculations.difference < 0 ? 'text-red-500' : 'text-green-600'}`}>{calculations.difference.toFixed(2)}</p></div>
-                     <div className="pt-4 border-t col-span-full grid grid-cols-4 gap-6">
-                        <div><p className="text-muted-foreground text-sm">Total A Trillar</p><p className="text-xl font-bold">{calculations.totalToThresh.toFixed(2)}</p></div>
-                        <div><p className="text-muted-foreground text-sm">Total Primeras</p><p className="text-xl font-bold">{calculations.totalPrimeras.toFixed(2)}</p></div>
-                        <div><p className="text-muted-foreground text-sm">Total Catadura</p><p className="text-xl font-bold">{calculations.totalCatadura.toFixed(2)}</p></div>
+                <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
+                    <h3 className="text-lg font-semibold text-foreground">Resumen de Liquidación</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-muted/50 p-4 rounded-lg">
+                            <p className="text-sm text-muted-foreground">Total a Trillar (Insumos)</p>
+                            <p className="text-2xl font-bold">{calculations.totalToThresh.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-muted/50 p-4 rounded-lg">
+                            <p className="text-sm text-muted-foreground">Total Primeras Producidas</p>
+                            <p className="text-2xl font-bold">{calculations.totalPrimeras.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-muted/50 p-4 rounded-lg">
+                            <p className="text-sm text-muted-foreground">Total Catadura Producida</p>
+                            <p className="text-2xl font-bold">{calculations.totalCatadura.toFixed(2)}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                        <div className="bg-blue-500/10 p-4 rounded-lg">
+                            <p className="text-sm text-blue-800 dark:text-blue-300">Primeras Necesarias (Contrato)</p>
+                            <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{calculations.neededPrimeras.toFixed(2)}</p>
+                        </div>
+
+                        <div className={`p-4 rounded-lg ${calculations.difference < -0.005 ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
+                            <p className={`text-sm ${calculations.difference < -0.005 ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>Diferencia para Completar Orden</p>
+                            <p className={`text-4xl font-bold ${calculations.difference < -0.005 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                {calculations.difference.toFixed(2)}
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}

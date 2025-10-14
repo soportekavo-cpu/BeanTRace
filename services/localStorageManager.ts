@@ -1,6 +1,6 @@
 import { 
     AppUser, AppRole, Exporter, Buyer, Supplier, Client, Contract, ContractLot, PurchaseReceipt,
-    ThreshingOrder, ThreshingOrderReceipt, PagePermissions, CoffeeType, ByproductType, Rendimiento, Reproceso, Mezcla, Salida
+    ThreshingOrder, ThreshingOrderReceipt, PagePermissions, CoffeeType, ByproductType, Rendimiento, Reproceso, Mezcla, Salida, Log
 } from '../types';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -31,6 +31,7 @@ const seedData = {
                 coffeeTypes: { ...allPermissions },
                 byproducts: { ...allPermissions },
                 trazabilidad: { ...allPermissions },
+                logs: { ...allPermissions },
             }
         },
         { 
@@ -48,6 +49,7 @@ const seedData = {
                 coffeeTypes: { ...viewOnlyPermissions },
                 byproducts: { ...viewOnlyPermissions },
                 trazabilidad: { ...viewOnlyPermissions },
+                logs: { ...noPermissions },
             }
         },
         { 
@@ -65,6 +67,7 @@ const seedData = {
                 coffeeTypes: { ...noPermissions },
                 byproducts: { ...noPermissions },
                 trazabilidad: { ...noPermissions },
+                logs: { ...noPermissions },
             }
         },
     ],
@@ -100,12 +103,22 @@ const seedData = {
         { id: 'ct4', tipo: 'Oro Natural' },
     ],
     byproductTypes: [
-        { id: 'bpt1', tipo: 'Primeras' },
-        { id: 'bpt2', tipo: '3ras. de Oliver' },
-        { id: 'bpt3', tipo: 'Rechazo de Electrónica' },
-        { id: 'bpt4', tipo: 'Pozol' },
-        { id: 'bpt5', tipo: 'Zaranda 13' },
+        // Lavados
+        { id: 'bpt3', tipo: '3ras. de Oliver L.' },
+        { id: 'bpt11', tipo: 'Chibola L.' },
+        { id: 'bpt7', tipo: 'Pozol L.' },
+        { id: 'bpt1', tipo: 'Primeras L.' },
+        { id: 'bpt5', tipo: 'Rechazo de Electrónica L.' },
+        { id: 'bpt9', tipo: 'Zaranda 13 L.' },
+        // Naturales
+        { id: 'bpt4', tipo: '3ras. de Oliver N.' },
+        { id: 'bpt12', tipo: 'Chibola N.' },
+        { id: 'bpt8', tipo: 'Pozol N.' },
+        { id: 'bpt2', tipo: 'Primeras N.' },
+        { id: 'bpt6', tipo: 'Rechazo de Electrónica N.' },
+        { id: 'bpt10', tipo: 'Zaranda 13 N.' },
     ],
+    logs: [],
 };
 
 const initializeDB = () => {
@@ -132,6 +145,76 @@ const dispatchDataChange = (collectionName: string) => {
     emitter.dispatchEvent(new CustomEvent('datachange', { detail: { collectionName } }));
 };
 
+// --- LOGGING ---
+const getCurrentUserEmail = (): string => {
+    try {
+        const storedUser = sessionStorage.getItem('authUser');
+        if (storedUser) {
+            return JSON.parse(storedUser).email;
+        }
+    } catch (e) {
+        console.error("Could not get user for logging", e);
+    }
+    return 'Sistema'; // Fallback
+};
+
+const collectionToModuleMap: Record<string, string> = {
+    contracts: 'Contratos (Exportación)',
+    contractLots: 'Partidas de Contrato',
+    purchaseReceipts: 'Ingreso de Café',
+    threshingOrders: 'Órdenes de Trilla',
+    rendimientos: 'Rendimientos',
+    reprocesos: 'Reprocesos',
+    mezclas: 'Mezclas',
+    salidas: 'Salidas',
+    users: 'Usuarios',
+    roles: 'Roles',
+    exporters: 'Exportadoras',
+    buyers: 'Compradores',
+    suppliers: 'Proveedores',
+    clients: 'Clientes',
+    coffeeTypes: 'Tipos de Café',
+    byproductTypes: 'Tipos de Subproductos',
+};
+
+const getDocIdentifier = (collectionName: string, doc: any): string => {
+    switch(collectionName) {
+        case 'contracts': return doc.contractNumber;
+        case 'purchaseReceipts': return doc.recibo;
+        case 'threshingOrders': return doc.orderNumber;
+        case 'rendimientos': return doc.rendimientoNumber;
+        case 'reprocesos': return doc.reprocesoNumber;
+        case 'mezclas': return doc.mezclaNumber;
+        case 'salidas': return doc.salidaNumber;
+        case 'users': return doc.email;
+        case 'roles': return doc.name;
+        case 'contractLots': return doc.partida;
+        case 'coffeeTypes': return doc.tipo;
+        case 'byproductTypes': return doc.tipo;
+        default: return doc.name || doc.id || 'ID desconocido';
+    }
+};
+
+const addLogEntry = (userEmail: string, action: Log['action'], module: string, description: string) => {
+    try {
+        const logs = JSON.parse(localStorage.getItem('logs') || '[]') as Log[];
+        const newLog: Log = {
+            id: generateId(),
+            timestamp: new Date().toISOString(),
+            userEmail,
+            action,
+            module,
+            description,
+        };
+        logs.unshift(newLog); // Add to the beginning for recent first
+        localStorage.setItem('logs', JSON.stringify(logs));
+        dispatchDataChange('logs');
+    } catch (e) {
+        console.error("Failed to write log entry:", e);
+    }
+};
+
+// --- API ---
 
 const api = {
     generateId,
@@ -157,6 +240,7 @@ const api = {
                     // FIX: Cast to `unknown` first to handle specific property addition for a single collection type.
                     newDoc = { ...doc, id: generateId(), devuelto: 0 } as unknown as T;
                 } else if (collectionName === 'salidas') {
+                    // FIX: Cast to `unknown` first to handle specific property addition for a single collection type.
                     newDoc = { ...doc, id: generateId(), status: 'Activo' } as unknown as T;
                 } else {
                     newDoc = { ...doc, id: generateId() } as T;
@@ -164,6 +248,15 @@ const api = {
                 data.push(newDoc);
                 localStorage.setItem(collectionName, JSON.stringify(data));
                 dispatchDataChange(collectionName);
+                
+                // Logging
+                if (collectionToModuleMap[collectionName]) {
+                    const userEmail = getCurrentUserEmail();
+                    const moduleName = collectionToModuleMap[collectionName];
+                    const identifier = getDocIdentifier(collectionName, newDoc);
+                    addLogEntry(userEmail, 'CREACIÓN', moduleName, `Creó ${moduleName}: '${identifier}'`);
+                }
+
                 resolve(newDoc);
             }, 150);
         });
@@ -185,6 +278,18 @@ const api = {
                     
                     localStorage.setItem(collectionName, JSON.stringify(data));
                     dispatchDataChange(collectionName);
+
+                    // Logging
+                    if (collectionToModuleMap[collectionName]) {
+                        const userEmail = getCurrentUserEmail();
+                        const moduleName = collectionToModuleMap[collectionName];
+                        const identifier = getDocIdentifier(collectionName, updatedDoc);
+                        const isAnulacion = (updates as any).status === 'Anulado';
+                        const action = isAnulacion ? 'ANULACIÓN' : 'MODIFICACIÓN';
+                        const description = `${isAnulacion ? 'Anuló' : 'Modificó'} ${moduleName}: '${identifier}'`;
+                        addLogEntry(userEmail, action, moduleName, description);
+                    }
+
                     resolve(updatedDoc);
                 } catch (error) {
                     reject(error);
@@ -198,6 +303,7 @@ const api = {
             setTimeout(() => {
                 try {
                     let data = JSON.parse(localStorage.getItem(collectionName) || '[]') as {id?: string}[];
+                    const docToDelete = data.find(doc => doc.id === docId);
                     const initialLength = data.length;
                     data = data.filter(doc => doc.id !== docId);
 
@@ -207,6 +313,15 @@ const api = {
 
                     localStorage.setItem(collectionName, JSON.stringify(data));
                     dispatchDataChange(collectionName);
+
+                    // Logging
+                    if (docToDelete && collectionToModuleMap[collectionName]) {
+                        const userEmail = getCurrentUserEmail();
+                        const moduleName = collectionToModuleMap[collectionName];
+                        const identifier = getDocIdentifier(collectionName, docToDelete);
+                        addLogEntry(userEmail, 'ELIMINACIÓN', moduleName, `Eliminó ${moduleName}: '${identifier}'`);
+                    }
+
                     resolve();
                 } catch (error) {
                     reject(error);
