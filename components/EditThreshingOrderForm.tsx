@@ -12,6 +12,9 @@
 
 
 
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso, NotificationSetting } from '../types';
@@ -302,10 +305,8 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                 if (change.type === 'Recibo') {
                     const receipt = allReceipts.find(r => r.id === sourceId);
                     if (receipt) {
-                        // FIX: Ensure operands are numbers before arithmetic operations.
+                        // FIX: Ensured operands are numbers before arithmetic operations to prevent potential runtime errors.
                         updatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', sourceId, {
-// @FIX: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
-// Ensured operands are numbers before arithmetic operations to prevent potential runtime errors.
                             enBodega: (Number(receipt.enBodega) || 0) + change.delta,
                             trillado: (Number(receipt.trillado) || 0) - change.delta
                         }));
@@ -313,7 +314,6 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                 } else if (change.type === 'Mezcla') {
                     const mezcla = allMezclas.find(m => m.id === sourceId);
                     if (mezcla) {
-                        // FIX: Ensure operands are numbers before arithmetic operations.
                         const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) + change.delta;
                         const newDespachado = (Number(mezcla.cantidadDespachada) || 0) - change.delta;
                         const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : (newDespachado > 0.005 ? 'Despachado Parcialmente' : 'Activo');

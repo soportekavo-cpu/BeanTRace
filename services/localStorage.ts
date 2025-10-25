@@ -98,17 +98,9 @@ const seedData = {
     clients: [
         { id: 'cli1', name: 'Cafetería El Gato Negro', phone: '555-2222', email: 'compras@gatonegro.com' }
     ],
-    contracts: [
-        { id: 'con1', contractNumber: 'PAN-DIZ-001/24', exporterId: 'exp1', exporterName: 'Dizano, S.A.', buyerId: 'buy1', buyerName: 'Panamerican Coffee Trading', saleDate: '2025-09-15', coffeeType: 'SHB EP', quantity: 0, position: 'Diciembre', differential: 10, priceUnit: '46 Kg.', shipmentMonth: 'Enero 2026', isFinished: false, certifications: ['Rainforest'], añoCosecha: '2025/2026' }
-    ],
-    contractLots: [
-        { id: 'lot1', contractId: 'con1', partida: '11/988/15', bultos: 275, empaque: 'Saco de Yute', pesoKg: 69, pesoQqs: 412.50, fijacion: 180, fechaFijacion: '2025-09-20', precioFinal: 190, guiaMuestra: 'GUA-123', fechaEnvioMuestra: '2025-09-18', muestraAprobada: true, destino: 'New York, USA', isf: true, isfSent: false, booking: 'BK-456', naviera: 'Maersk', valorCobro: 78375, añoCosecha: '2025/2026' }
-    ],
-    purchaseReceipts: [
-        { id: 'rec1', certificacion: ['Orgánico'], fecha: '2025-09-21', recibo: 'C-1', proveedorId: 'sup1', placaVehiculo: 'P-123ABC', piloto: 'Juan Perez', tipo: 'Pergamino', pesoBruto: 500, yute: 10, nylon: 0, tara: 0.20, precio: 1500, gMuestra: 500, gPrimera: 410, gRechazo: 90, precioCatadura: 200, pesoNetoEnvio: 500, notas: '', cuppingProfile: { cuppingDate: '2025-09-21' }, status: 'Activo', pesoNeto: 499.80, primera: 409.836, rechazo: 89.964, totalBruto: 499.80, rendimientoTotal: 100, rendimientoPrimera: 82, rendimientoRechazo: 18, totalCompra: 750000, costoCatadura: 17992.8, diferencia: 0, trillado: 0, enBodega: 499.80, devuelto: 0 },
-        { id: 'rec2', certificacion: [], fecha: '2025-09-21', recibo: 'C-2', proveedorId: 'sup2', placaVehiculo: 'P-456DEF', piloto: 'Luis Garcia', tipo: 'Cereza', pesoBruto: 500, yute: 0, nylon: 20, tara: 0.20, precio: 300, gMuestra: 500, gPrimera: 100, gRechazo: 400, precioCatadura: 50, pesoNetoEnvio: 500, notas: '', cuppingProfile: { cuppingDate: '2025-09-21' }, status: 'Activo', pesoNeto: 499.80, primera: 99.96, rechazo: 399.84, totalBruto: 499.80, rendimientoTotal: 100, rendimientoPrimera: 20, rendimientoRechazo: 80, totalCompra: 150000, costoCatadura: 19992, diferencia: 0, trillado: 0, enBodega: 499.80, devuelto: 0 },
-        { id: 'rec3', certificacion: [], fecha: '2025-09-21', recibo: 'C-3', proveedorId: 'sup3', placaVehiculo: 'P-789GHI', piloto: 'Mario Lopez', tipo: 'Oro Lavado', pesoBruto: 500, yute: 15, nylon: 5, tara: 0.35, precio: 1800, gMuestra: 500, gPrimera: 490, gRechazo: 10, precioCatadura: 300, pesoNetoEnvio: 500, notas: '', cuppingProfile: { cuppingDate: '2025-09-21' }, status: 'Activo', pesoNeto: 499.65, primera: 489.657, rechazo: 9.993, totalBruto: 499.65, rendimientoTotal: 100, rendimientoPrimera: 98, rendimientoRechazo: 2, totalCompra: 900000, costoCatadura: 2997.9, diferencia: 0, trillado: 0, enBodega: 499.65, devuelto: 0 }
-    ],
+    contracts: [],
+    contractLots: [],
+    purchaseReceipts: [],
     threshingOrders: [],
     threshingOrderReceipts: [],
     rendimientos: [],

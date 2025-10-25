@@ -12,6 +12,9 @@
 
 
 
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { Mezcla, Viñeta, Rendimiento, Reproceso, MezclaVignetteInput } from '../types';
@@ -53,9 +56,7 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, onCancel, onSav
             if (isEditMode && existingMezcla) {
                 const initialVignettes = existingMezcla.inputVignettesData.map(iv => {
                     const originalVignette = combined.find(v => v.id === iv.vignetteId);
-                    // FIX: Ensure operands are numbers before arithmetic operations. This pattern prevents errors if a property is undefined from the data source.
-// @FIX: Operator '+' cannot be applied to types 'unknown' and 'number'. The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
-// Ensured all operands are treated as numbers before performing arithmetic operations.
+                    // FIX: Ensured all operands are treated as numbers before performing arithmetic operations.
                     const originalPesoNeto = originalVignette ? Number(originalVignette.pesoNeto || 0) : 0;
                     const pesoUtilizadoNum = Number(iv.pesoUtilizado || 0);
                     const pesoNetoForEditing = originalPesoNeto + pesoUtilizadoNum;
@@ -290,7 +291,7 @@ const MezclaForm: React.FC<MezclaFormProps> = ({ existingMezcla, onCancel, onSav
                 {selectedVignettes.length > 0 && (
                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="text-left text-muted-foreground whitespace-nowrap"><tr><th className="p-2 w-1/4">No. Viñeta</th><th className="p-2 w-1/4">Tipo</th><th className="p-2 w-1/4 text-right">Peso Neto Disponible</th><th className="p-2 w-1/4">Peso a Utilizar</th><th></th></tr></thead>
+                            <thead className="text-left text-muted-foreground whitespace-nowrap"><tr><th className="pb-2 w-1/4">No. Viñeta</th><th className="pb-2 w-1/4">Tipo</th><th className="pb-2 w-1/4 text-right">Peso Neto Disponible</th><th className="pb-2 w-1/4">Peso a Utilizar</th><th></th></tr></thead>
                             <tbody>
                                 {selectedVignettes.map(v => (
                                     <tr key={v.id} className="border-b">

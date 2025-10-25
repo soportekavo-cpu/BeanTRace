@@ -12,6 +12,9 @@
 
 
 
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso, NotificationSetting } from '../types';
@@ -265,10 +268,8 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
                 if (row.inputType === 'Recibo') {
                     const receipt = availableReceipts.find(r => r.id === row.sourceId);
                     if (receipt) {
-                        // FIX: Ensure operands are numbers before arithmetic operations.
+                        // FIX: Ensured operands are numbers before arithmetic operations to prevent potential runtime errors with data from localStorage.
                         inventoryUpdatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', receipt.id, {
-// @FIX: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
-// Ensured operands are numbers before arithmetic operations to prevent potential runtime errors with data from localStorage.
                             trillado: (Number(receipt.trillado) || 0) + (Number(row.amountToThresh) || 0),
                             enBodega: (Number(receipt.enBodega) || 0) - (Number(row.amountToThresh) || 0),
                         }));
