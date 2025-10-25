@@ -1,6 +1,8 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { PurchaseReceipt, Supplier, ThreshingOrderReceipt, ThreshingOrder, ContractLot, Salida } from '../types';
+import api from '../services/localStorageManager';
+import { PurchaseReceipt, Supplier, ThreshingOrderReceipt, ThreshingOrder, ContractLot, Salida, Exporter } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
@@ -10,6 +12,8 @@ import ReceiptPDF from '../components/ReceiptPDF';
 import EyeIcon from '../components/icons/EyeIcon';
 import { printComponent } from '../utils/printUtils';
 import ToggleSwitch from '../components/ToggleSwitch';
+import { useToast } from '../hooks/useToast';
+import { useHighlight } from '../contexts/HighlightContext';
 
 const formatDate = (dateString: string) => {
     if (!dateString || !dateString.includes('-')) return '';
@@ -17,10 +21,10 @@ const formatDate = (dateString: string) => {
     return `${day}/${month}/${year}`;
 };
 
-const CalculatedFieldDisplay: React.FC<{ label: string, value: string | number, isPercentage?: boolean, isCurrency?: boolean, className?: string }> = ({ label, value, isPercentage, isCurrency, className = '' }) => (
+const CalculatedFieldDisplay: React.FC<{ label: string, value: string | number, isPercentage?: boolean, isCurrency?: boolean, className?: string, valueClassName?: string }> = ({ label, value, isPercentage, isCurrency, className = '', valueClassName = '' }) => (
     <div className={className}>
         <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="font-semibold text-foreground">
+        <p className={`font-semibold ${valueClassName || 'text-foreground'}`}>
             {typeof value === 'number'
                 ? `${isCurrency ? 'Q' : ''}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${isPercentage ? '%' : ''}`
                 : value
@@ -39,6 +43,8 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
     }
     const [usageHistory, setUsageHistory] = useState<UsageHistoryItem[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(true);
+
+    const diferencia = (receipt.pesoNetoEnvio || 0) - receipt.pesoNeto;
 
     useEffect(() => {
         const fetchUsageHistory = async () => {
@@ -81,6 +87,18 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
 
         fetchUsageHistory();
     }, [receipt]);
+    
+    const openPdf = (pdfData: string) => {
+        const byteCharacters = atob(pdfData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {type: 'application/pdf'});
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose}>
@@ -91,7 +109,7 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                     </div>
                 )}
                  <div className="flex justify-between items-center mb-4 pb-4 border-b">
-                    <h3 className="text-xl font-bold text-foreground">Detalle del Recibo: <span className="text-green-600">{receipt.recibo}</span></h3>
+                    <h3 className="text-xl font-bold text-foreground">Detalle del Recibo: <span className="text-red-600 dark:text-red-500">{receipt.recibo}</span></h3>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-2xl leading-none">&times;</button>
                 </div>
                 <div className="space-y-6 text-sm">
@@ -100,7 +118,7 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                         <h4 className="text-lg font-semibold text-blue-600 mb-3">Información General</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <CalculatedFieldDisplay label="Fecha" value={formatDate(receipt.fecha)} />
-                            <CalculatedFieldDisplay label="Proveedor" value={supplier?.name || 'N/A'} />
+                            <CalculatedFieldDisplay label="Proveedor" value={supplier?.name || 'N/A'} valueClassName="text-blue-600 dark:text-blue-400"/>
                             <CalculatedFieldDisplay label="Placa del Vehículo" value={receipt.placaVehiculo} />
                             <CalculatedFieldDisplay label="Piloto" value={receipt.piloto} />
                             <CalculatedFieldDisplay label="Certificaciones" value={receipt.certificacion.join(', ') || 'N/A'} className="col-span-full"/>
@@ -110,12 +128,19 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                     <div className="border-b pb-4">
                         <h4 className="text-lg font-semibold text-purple-600 mb-3">Detalle del Café y Pesos</h4>
                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <CalculatedFieldDisplay label="Tipo de Café" value={receipt.tipo === 'Otro' ? receipt.customTipo || receipt.tipo : receipt.tipo} />
+                            <CalculatedFieldDisplay label="Tipo de Café" value={receipt.tipo === 'Otro' ? receipt.customTipo || receipt.tipo : receipt.tipo} valueClassName="text-green-600 dark:text-green-400"/>
                             <CalculatedFieldDisplay label="Peso Bruto" value={receipt.pesoBruto} />
                             <CalculatedFieldDisplay label="Yute (sacos)" value={receipt.yute} />
                             <CalculatedFieldDisplay label="Nylon (Sacos)" value={receipt.nylon} />
                             <CalculatedFieldDisplay label="Tara" value={receipt.tara} />
-                            <CalculatedFieldDisplay label="Peso Neto" value={receipt.pesoNeto} />
+                            <CalculatedFieldDisplay label="Peso Neto" value={receipt.pesoNeto} valueClassName="font-bold text-purple-600 dark:text-purple-400" />
+                            <CalculatedFieldDisplay label="Peso Neto Envío" value={receipt.pesoNetoEnvio || 0} />
+                            <div>
+                                <p className="text-sm text-muted-foreground">Diferencia</p>
+                                <p className={`font-semibold ${diferencia < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
+                                    {diferencia.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
                         </div>
                     </div>
                      {/* Analisis */}
@@ -127,9 +152,9 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                                 <CalculatedFieldDisplay label="g Primera" value={receipt.gPrimera} />
                                 <CalculatedFieldDisplay label="g Rechazo" value={receipt.gRechazo} />
                                 <div />
-                                <CalculatedFieldDisplay label="Primera" value={receipt.primera} />
-                                <CalculatedFieldDisplay label="Rechazo" value={receipt.rechazo} />
-                                <CalculatedFieldDisplay label="Total Bruto" value={receipt.totalBruto} />
+                                <CalculatedFieldDisplay label="Primera" value={receipt.primera} valueClassName="font-bold text-purple-600 dark:text-purple-400"/>
+                                <CalculatedFieldDisplay label="Rechazo" value={receipt.rechazo} valueClassName="font-bold text-purple-600 dark:text-purple-400"/>
+                                <CalculatedFieldDisplay label="Total Bruto" value={receipt.totalBruto} valueClassName="font-bold text-purple-600 dark:text-purple-400"/>
                                 <div />
                                 <CalculatedFieldDisplay label="% Rendimiento Total" value={receipt.rendimientoTotal} isPercentage />
                                 <CalculatedFieldDisplay label="% Rendimiento Primera" value={receipt.rendimientoPrimera} isPercentage />
@@ -138,7 +163,7 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                         </div>
                     )}
                      {/* Catacion */}
-                     {receipt.cuppingProfile && (
+                     {canViewAnalysis && receipt.cuppingProfile && (
                         <div className="border-b pb-4">
                             <h4 className="text-lg font-semibold text-orange-600 mb-3">Perfil de Catación</h4>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -161,8 +186,6 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                                 <CalculatedFieldDisplay label="Total Compra (Q)" value={receipt.totalCompra} isCurrency />
                                 <CalculatedFieldDisplay label="Precio Catadura (Q)" value={receipt.precioCatadura} isCurrency />
                                 <CalculatedFieldDisplay label="Costo Catadura (Q)" value={receipt.costoCatadura} isCurrency />
-                                <CalculatedFieldDisplay label="Peso Bruto Envío" value={receipt.pesoBrutoEnvio} />
-                                <CalculatedFieldDisplay label="Diferencia" value={receipt.diferencia} />
                             </div>
                         </div>
                     )}
@@ -172,13 +195,12 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                              <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800">
                                 <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">Trillado</p>
-                                <p className="font-bold text-xl text-blue-600 dark:text-blue-400">{Number(receipt.trillado || 0).toFixed(2)}</p>
+                                <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{Number(receipt.trillado || 0).toFixed(2)}</p>
                             </div>
                             <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-900/50 border border-purple-200 dark:border-purple-800">
                                 <p className="text-sm text-purple-800 dark:text-purple-300 font-medium">En Bodega</p>
                                 <p className="font-bold text-xl text-purple-600 dark:text-purple-400">{Number(receipt.enBodega || 0).toFixed(2)}</p>
                             </div>
-                            <CalculatedFieldDisplay label="Recibo Devuelto" value={receipt.reciboDevuelto ? 'Sí' : 'No'} />
                             <CalculatedFieldDisplay label="Notas" value={receipt.notas} className="col-span-full"/>
                         </div>
                     </div>
@@ -191,9 +213,9 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                             <div className="space-y-3">
                                 {usageHistory.map((item, index) => (
                                     <div key={index} className="p-3 rounded-lg bg-muted/50 border border-border">
-                                        <p className="font-semibold text-foreground">Orden de Trilla: {item.orderNumber}</p>
-                                        <p className="text-sm text-muted-foreground">Partida(s): {item.partidas}</p>
-                                        <p className="text-sm">Cantidad Utilizada: <span className="font-bold">{item.amountUsed.toFixed(2)} qqs.</span></p>
+                                        <p className="font-semibold text-foreground">Orden de Trilla: <span className="text-red-600 dark:text-red-500">{item.orderNumber}</span></p>
+                                        <p className="text-sm text-muted-foreground">Partida(s): <span className="text-red-600 dark:text-red-500">{item.partidas}</span></p>
+                                        <p className="text-sm">Cantidad Utilizada: <span className="font-bold text-purple-600 dark:text-purple-400">{item.amountUsed.toFixed(2)} qqs.</span></p>
                                     </div>
                                 ))}
                             </div>
@@ -203,8 +225,16 @@ const ReceiptDetailModal: React.FC<{ receipt: PurchaseReceipt; supplier: Supplie
                     </div>
                 </div>
                  <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
+                    {receipt.pdfEnvio && (
+                        <button 
+                            onClick={() => openPdf(receipt.pdfEnvio!)} 
+                            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50"
+                        >
+                            Ver PDF Envío
+                        </button>
+                    )}
                     <button onClick={() => onGeneratePdf(receipt)} className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted disabled:bg-muted/50 disabled:cursor-not-allowed" disabled={receipt.status === 'Anulado'}>
-                        Generar PDF
+                        Generar PDF Recibo
                     </button>
                     <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
                         Cerrar
@@ -305,6 +335,8 @@ const IngresoPage: React.FC = () => {
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection } | null>({ key: 'fecha', direction: 'descending' });
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [showOnlyInStock, setShowOnlyInStock] = useState(true);
+    const { addToast } = useToast();
+    const { targetId, clearHighlight } = useHighlight();
 
     const canViewCosts = permissions?.viewCosts === true;
     const canViewAnalysis = permissions?.viewAnalysis === true;
@@ -320,6 +352,7 @@ const IngresoPage: React.FC = () => {
             setSuppliers(suppliersData);
         } catch (error) {
             console.error("Error fetching data:", error);
+            addToast("Error al cargar los datos de ingresos.", "error");
         } finally {
             setLoading(false);
         }
@@ -333,10 +366,23 @@ const IngresoPage: React.FC = () => {
                 fetchData();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
     
+    useEffect(() => {
+        if (targetId && !loading) {
+            const element = document.querySelector(`[data-id="${targetId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-row');
+                setTimeout(() => {
+                    element.classList.remove('highlight-row');
+                }, 4500);
+            }
+        }
+    }, [targetId, receipts, loading]);
+
     const getSupplierName = (id: string) => suppliers.find(s => s.id === id)?.name || 'N/A';
 
     const processedReceipts = useMemo(() => {
@@ -405,7 +451,7 @@ const IngresoPage: React.FC = () => {
                 let usedIn = [];
                 if (isUsedInThreshing) usedIn.push("una orden de trilla");
                 if (isUsedInSalida) usedIn.push("una salida (devolución)");
-                alert(`No se puede anular el recibo '${receiptToVoid.recibo}' porque está siendo utilizado en ${usedIn.join(' y ')}. Anule los procesos posteriores primero.`);
+                addToast(`No se puede anular el recibo '${receiptToVoid.recibo}' porque está siendo utilizado en ${usedIn.join(' y ')}. Anule los procesos posteriores primero.`, 'error');
                 setReceiptToVoid(null);
                 return;
             }
@@ -415,8 +461,10 @@ const IngresoPage: React.FC = () => {
                 enBodega: 0,
                 trillado: 0
             });
+            addToast(`Recibo ${receiptToVoid.recibo} anulado correctamente.`, "success");
         } catch (error) {
             console.error("Error voiding receipt:", error);
+            addToast("Error al anular el recibo.", "error");
         } finally {
             setReceiptToVoid(null);
         }
@@ -427,13 +475,15 @@ const IngresoPage: React.FC = () => {
         setReceiptToEdit(null);
     };
 
-    const handlePrint = (receipt: PurchaseReceipt) => {
+    const handlePrint = async (receipt: PurchaseReceipt) => {
         const supplier = suppliers.find(s => s.id === receipt.proveedorId);
         if (!supplier) {
-            alert("Proveedor no encontrado, no se puede generar el PDF.");
+            addToast("Proveedor no encontrado, no se puede generar el PDF.", "error");
             return;
         }
-        printComponent(<ReceiptPDF receipt={receipt} supplier={supplier} />, `Recibo-${receipt.recibo}`);
+        const exporters = await api.getCollection<Exporter>('exporters');
+        const dizano = exporters.find(e => e.name === 'Dizano, S.A.');
+        printComponent(<ReceiptPDF receipt={receipt} supplier={supplier} exporterLogo={dizano?.logo} />, `Recibo-${receipt.recibo}`);
     };
 
     const requestSort = (key: SortKey) => {
@@ -506,15 +556,16 @@ const IngresoPage: React.FC = () => {
                             <tr><td colSpan={8} className="text-center py-10">Cargando recibos...</td></tr>
                         ) : processedReceipts.length > 0 ? (
                             processedReceipts.map((receipt) => (
-                                <tr key={receipt.id} 
+                                <tr key={receipt.id}
+                                    data-id={receipt.id}
                                     className={`border-b border-border transition-colors ${getRowClass(receipt)}`} 
                                     onClick={() => receipt.status !== 'Anulado' && setReceiptToView(receipt)}>
                                     <td className="px-6 py-4">{formatDate(receipt.fecha)}</td>
-                                    <td className="px-6 py-4 font-medium text-foreground">{receipt.recibo}</td>
-                                    <td className="px-6 py-4">{receipt.proveedorName}</td>
-                                    <td className="px-6 py-4">{receipt.tipoCafe}</td>
-                                    <td className="px-6 py-4 text-right">{Number(receipt.pesoNeto).toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-right">{Number(receipt.trillado || 0).toFixed(2)}</td>
+                                    <td className="px-6 py-4 font-medium text-red-600 dark:text-red-500">{receipt.recibo}</td>
+                                    <td className="px-6 py-4 text-blue-600 dark:text-blue-400">{receipt.proveedorName}</td>
+                                    <td className="px-6 py-4 text-green-600 dark:text-green-400">{receipt.tipoCafe}</td>
+                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{Number(receipt.pesoNeto).toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{Number(receipt.trillado || 0).toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right font-bold text-purple-600 dark:text-purple-400">{Number(receipt.enBodega || 0).toFixed(2)}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">

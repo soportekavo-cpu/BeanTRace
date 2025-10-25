@@ -1,9 +1,12 @@
+
+
 import React, { useState, useEffect } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Supplier, PurchaseReceipt } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
+import { useToast } from '../hooks/useToast';
 
 const SuppliersPage: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -12,6 +15,7 @@ const SuppliersPage: React.FC = () => {
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
     const [supplierToEdit, setSupplierToEdit] = useState<Supplier | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
+    const { addToast } = useToast();
     
     const initialSupplierState = { name: '', phone: '', email: '' };
     const [newSupplier, setNewSupplier] = useState<Omit<Supplier, 'id'>>(initialSupplierState);
@@ -37,8 +41,8 @@ const SuppliersPage: React.FC = () => {
                 fetchSuppliers();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,7 +78,7 @@ const SuppliersPage: React.FC = () => {
         try {
             const purchaseReceipts = await api.getCollection<PurchaseReceipt>('purchaseReceipts', pr => pr.proveedorId === supplierToDelete.id);
             if (purchaseReceipts.length > 0) {
-                alert(`No se puede eliminar el proveedor '${supplierToDelete.name}' porque está asociado a ${purchaseReceipts.length} recibo(s) de compra.`);
+                addToast(`No se puede eliminar el proveedor '${supplierToDelete.name}' porque está asociado a ${purchaseReceipts.length} recibo(s) de compra.`, 'error');
                 setSupplierToDelete(null);
                 return;
             }
@@ -146,7 +150,7 @@ const SuppliersPage: React.FC = () => {
                         ) : suppliers.length > 0 ? (
                             suppliers.map((supplier) => (
                                 <tr key={supplier.id} className="border-b border-border hover:bg-muted/50">
-                                    <td className="px-6 py-4 font-medium text-foreground">{supplier.name}</td>
+                                    <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{supplier.name}</td>
                                     <td className="px-6 py-4">{supplier.phone}</td>
                                     <td className="px-6 py-4">{supplier.email}</td>
                                     <td className="px-6 py-4">

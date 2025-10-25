@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, ContractLot, PurchaseReceipt, Viñeta, Mezcla, Salida, Rendimiento, Reproceso, Supplier, ThreshingOrder } from '../types';
@@ -78,7 +79,6 @@ const DashboardPage: React.FC = () => {
                 suppliers,
                 threshingOrders,
             ] = await Promise.all([
-                // FIX: Corrected typo 'Rendimento' to 'Rendimiento'
                 api.getCollection<Rendimiento>('rendimientos'),
                 api.getCollection<Reproceso>('reprocesos'),
                 api.getCollection<Contract>('contracts'),

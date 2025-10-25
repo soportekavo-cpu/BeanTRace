@@ -9,9 +9,10 @@ interface AddContractLotFormProps {
     existingLots: ContractLot[];
     onCancel: () => void;
     onLotAdded: () => void;
+    canViewPrices: boolean;
 }
 
-const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, exporter, existingLots, onCancel, onLotAdded }) => {
+const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, exporter, existingLots, onCancel, onLotAdded, canViewPrices }) => {
     const initialLotState = {
         partida: '',
         bultos: '',
@@ -40,7 +41,7 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
     const [pdfFijacionFile, setPdfFijacionFile] = useState<File | null>(null);
     const pdfInputRef = useRef<HTMLInputElement>(null);
 
-    const navierasPopulares = ["Maersk", "Hapag-Lloyd", "CMA-CGM", "Seaboard Marine", "ONE Line", "MSC", "Evergreen Line"];
+    const navierasPopulares = ["Maersk", "Hapag-Lloyd", "CMA-CGG", "Seaboard Marine", "ONE Line", "MSC", "Evergreen Line"];
     const empaqueOptions = ["Saco de Yute", "GrainPro", "Caja", "Big Bag", "Jumbo", "Otro"];
     const showIsfSuggestion = lot.destino.toLowerCase().includes('usa') || lot.destino.toLowerCase().includes('ee.uu');
     
@@ -170,19 +171,22 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
                     <div><label className="text-sm text-muted-foreground">Peso qqs.</label><p className="font-semibold text-foreground mt-1 p-2">{lot.pesoQqs.toFixed(2)}</p></div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                     <div><label htmlFor="fijacion" className="text-sm text-muted-foreground">Fijación ($)</label><input type="number" step="any" id="fijacion" name="fijacion" value={lot.fijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                     <div><label htmlFor="fechaFijacion" className="text-sm text-muted-foreground">Fecha Fijación</label><input type="date" id="fechaFijacion" name="fechaFijacion" value={lot.fechaFijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                     <div><label className="text-sm text-muted-foreground">Precio Final</label><p className="font-semibold text-foreground mt-1 p-2">${lot.precioFinal.toFixed(2)}</p></div>
-                     <div>
-                        <label className="block text-sm font-medium text-muted-foreground mb-1">PDF Fijación</label>
-                        <button type="button" onClick={() => pdfInputRef.current?.click()} className="w-full text-sm font-semibold text-green-700 bg-green-100 hover:bg-green-200/50 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-900 px-4 py-2 rounded-lg transition-colors">
-                            Seleccionar archivo
-                        </button>
-                        <input type="file" ref={pdfInputRef} onChange={e => setPdfFijacionFile(e.target.files?.[0] || null)} className="hidden" />
-                        {pdfFijacionFile && <p className="text-xs text-muted-foreground mt-1">{pdfFijacionFile.name}</p>}
+                {canViewPrices && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                         <div><label htmlFor="fijacion" className="text-sm text-muted-foreground">Fijación ($)</label><input type="number" step="any" id="fijacion" name="fijacion" value={lot.fijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                         <div><label htmlFor="fechaFijacion" className="text-sm text-muted-foreground">Fecha Fijación</label><input type="date" id="fechaFijacion" name="fechaFijacion" value={lot.fechaFijacion} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                         <div><label className="text-sm text-muted-foreground">Precio Final</label><p className="font-semibold text-foreground mt-1 p-2">${lot.precioFinal.toFixed(2)}</p></div>
+                         <div>
+                            <label className="block text-sm font-medium text-muted-foreground mb-1">PDF Fijación</label>
+                            <button type="button" onClick={() => pdfInputRef.current?.click()} className="w-full text-sm font-semibold text-green-700 bg-green-100 hover:bg-green-200/50 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-900 px-4 py-2 rounded-lg transition-colors">
+                                Seleccionar archivo
+                            </button>
+                            <input type="file" ref={pdfInputRef} onChange={e => setPdfFijacionFile(e.target.files?.[0] || null)} className="hidden" />
+                            {pdfFijacionFile && <p className="text-xs text-muted-foreground mt-1">{pdfFijacionFile.name}</p>}
+                        </div>
                     </div>
-                </div>
+                )}
+
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6 items-center">
                     <div><label htmlFor="guiaMuestra" className="text-sm text-muted-foreground">Guía Muestra</label><input type="text" id="guiaMuestra" name="guiaMuestra" value={lot.guiaMuestra} onChange={handleInputChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
@@ -220,10 +224,13 @@ const AddContractLotForm: React.FC<AddContractLotFormProps> = ({ contract, expor
                     </div>
                 </div>
                 
-                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t pt-6">
-                    <div className="md:col-span-3"></div>
-                     <div><label className="text-sm text-muted-foreground">Valor del Cobro ($)</label><p className="font-semibold text-2xl text-green-600 mt-1">${lot.valorCobro.toFixed(2)}</p></div>
-                 </div>
+                {canViewPrices && (
+                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t pt-6">
+                        <div className="md:col-span-3"></div>
+                         <div><label className="text-sm text-muted-foreground">Valor del Cobro ($)</label><p className="font-semibold text-2xl text-green-600 mt-1">${lot.valorCobro.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
+                     </div>
+                )}
+
 
                 {error && <p className="text-sm text-center text-red-500">{error}</p>}
                 

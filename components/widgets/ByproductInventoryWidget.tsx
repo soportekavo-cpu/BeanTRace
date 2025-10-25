@@ -7,10 +7,11 @@ const ByproductInventoryWidget: React.FC<{ data: DashboardData; onWidgetClick: (
     
     const chartData = useMemo(() => {
         const inventoryMap: Record<string, number> = {};
-        const primerasTypes = new Set(['Primeras L.', 'Primeras N.']);
+        const primerasTypes = new Set(['L. Primeras', 'N. Primeras']);
 
         data.vignettes.forEach(vignette => {
-            if ((vignette.status === 'En Bodega' || vignette.status === 'Mezclada Parcialmente') && vignette.pesoNeto > 0.005) {
+            const isInStock = (vignette.status === 'En Bodega' || vignette.status === 'Mezclada Parcialmente') && vignette.pesoNeto > 0.005;
+            if (isInStock) {
                 if (!primerasTypes.has(vignette.tipo)) {
                     inventoryMap[vignette.tipo] = (inventoryMap[vignette.tipo] || 0) + vignette.pesoNeto;
                 }

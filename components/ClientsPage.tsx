@@ -1,9 +1,12 @@
+
+
 import React, { useState, useEffect } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Client, ThreshingOrder, Salida } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
+import { useToast } from '../hooks/useToast';
 
 const ClientsPage: React.FC = () => {
     const [clients, setClients] = useState<Client[]>([]);
@@ -12,6 +15,7 @@ const ClientsPage: React.FC = () => {
     const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
     const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
+    const { addToast } = useToast();
     
     const initialClientState = { name: '', phone: '', email: '' };
     const [newClient, setNewClient] = useState<Omit<Client, 'id'>>(initialClientState);
@@ -37,8 +41,8 @@ const ClientsPage: React.FC = () => {
                 fetchClients();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,7 +82,7 @@ const ClientsPage: React.FC = () => {
             ]);
 
             if (threshingOrders.length > 0 || salidas.length > 0) {
-                alert(`No se puede eliminar el cliente '${clientToDelete.name}' porque está asociado a ${threshingOrders.length} orden(es) de venta local y ${salidas.length} salida(s).`);
+                addToast(`No se puede eliminar el cliente '${clientToDelete.name}' porque está asociado a ${threshingOrders.length} orden(es) de venta local y ${salidas.length} salida(s).`, 'error');
                 setClientToDelete(null);
                 return;
             }
@@ -151,7 +155,7 @@ const ClientsPage: React.FC = () => {
                         ) : clients.length > 0 ? (
                             clients.map((client) => (
                                 <tr key={client.id} className="border-b border-border hover:bg-muted/50">
-                                    <td className="px-6 py-4 font-medium text-foreground">{client.name}</td>
+                                    <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{client.name}</td>
                                     <td className="px-6 py-4">{client.phone}</td>
                                     <td className="px-6 py-4">{client.email}</td>
                                     <td className="px-6 py-4">

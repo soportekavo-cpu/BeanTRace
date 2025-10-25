@@ -17,7 +17,10 @@ const ReprocesoDetailModal: React.FC<ReprocesoDetailModalProps> = ({ reproceso, 
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
             <div className="bg-card p-6 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 pb-4 border-b">
-                    <h3 className="text-xl font-bold text-purple-600">Detalle de Reproceso: {reproceso.reprocesoNumber}</h3>
+                     <div className="flex items-center gap-4">
+                        <h3 className="text-xl font-bold text-purple-600">Detalle de Reproceso: {reproceso.reprocesoNumber}</h3>
+                        {reproceso.isFinalizado && <span className="px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">FINALIZADO</span>}
+                    </div>
                      <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-2xl leading-none">&times;</button>
                 </div>
 
@@ -89,9 +92,9 @@ const ReprocesoDetailModal: React.FC<ReprocesoDetailModalProps> = ({ reproceso, 
                     </div>
 
                     {reproceso.notes && (
-                         <div>
-                            <h4 className="text-md font-semibold text-foreground mb-1">Notas</h4>
-                            <p className="text-sm p-3 bg-muted/50 rounded-md border">{reproceso.notes}</p>
+                         <div className="mt-6">
+                            <h4 className="text-lg font-semibold text-foreground mb-2">Notas</h4>
+                            <p className="text-sm p-3 bg-muted/50 rounded-md border whitespace-pre-wrap">{reproceso.notes}</p>
                         </div>
                     )}
                 </div>

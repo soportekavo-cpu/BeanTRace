@@ -7,9 +7,10 @@ interface EditContractLotFormProps {
     contract: Contract;
     onSave: (updatedLot: ContractLot) => void;
     onCancel: () => void;
+    canViewPrices: boolean;
 }
 
-const EditContractLotForm: React.FC<EditContractLotFormProps> = ({ lot, contract, onSave, onCancel }) => {
+const EditContractLotForm: React.FC<EditContractLotFormProps> = ({ lot, contract, onSave, onCancel, canViewPrices }) => {
     const [formData, setFormData] = useState<any>({
         ...lot,
         bultos: lot.bultos.toString(),
@@ -123,19 +124,22 @@ const EditContractLotForm: React.FC<EditContractLotFormProps> = ({ lot, contract
                         <div><label className="text-sm text-muted-foreground">Peso qqs.</label><p className="font-semibold text-foreground mt-1 p-2">{formData.pesoQqs.toFixed(2)}</p></div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div><label htmlFor="fijacion" className="text-sm text-muted-foreground">Fijación ($)</label><input type="number" step="any" id="fijacion" name="fijacion" value={formData.fijacion} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                        <div><label htmlFor="fechaFijacion" className="text-sm text-muted-foreground">Fecha Fijación</label><input type="date" id="fechaFijacion" name="fechaFijacion" value={formData.fechaFijacion} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
-                        <div><label className="text-sm text-muted-foreground">Precio Final</label><p className="font-semibold text-foreground mt-1 p-2">${formData.precioFinal.toFixed(2)}</p></div>
-                         <div>
-                            <label className="block text-sm font-medium text-muted-foreground mb-1">PDF Fijación</label>
-                            <button type="button" onClick={() => pdfInputRef.current?.click()} className="w-full text-sm font-semibold text-green-700 bg-green-100 hover:bg-green-200/50 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-900 px-4 py-2 rounded-lg transition-colors">
-                                Seleccionar archivo
-                            </button>
-                            <input type="file" ref={pdfInputRef} onChange={e => setPdfFijacionFile(e.target.files?.[0] || null)} className="hidden" />
-                            {pdfFijacionFile && <p className="text-xs text-muted-foreground mt-1">{pdfFijacionFile.name}</p>}
+                    {canViewPrices && (
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <div><label htmlFor="fijacion" className="text-sm text-muted-foreground">Fijación ($)</label><input type="number" step="any" id="fijacion" name="fijacion" value={formData.fijacion} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                            <div><label htmlFor="fechaFijacion" className="text-sm text-muted-foreground">Fecha Fijación</label><input type="date" id="fechaFijacion" name="fechaFijacion" value={formData.fechaFijacion} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>
+                            <div><label className="text-sm text-muted-foreground">Precio Final</label><p className="font-semibold text-foreground mt-1 p-2">${formData.precioFinal.toFixed(2)}</p></div>
+                             <div>
+                                <label className="block text-sm font-medium text-muted-foreground mb-1">PDF Fijación</label>
+                                <button type="button" onClick={() => pdfInputRef.current?.click()} className="w-full text-sm font-semibold text-green-700 bg-green-100 hover:bg-green-200/50 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-900 px-4 py-2 rounded-lg transition-colors">
+                                    Seleccionar archivo
+                                </button>
+                                <input type="file" ref={pdfInputRef} onChange={e => setPdfFijacionFile(e.target.files?.[0] || null)} className="hidden" />
+                                {pdfFijacionFile && <p className="text-xs text-muted-foreground mt-1">{pdfFijacionFile.name}</p>}
+                            </div>
                         </div>
-                    </div>
+                    )}
+
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6 items-center">
                         <div><label htmlFor="guiaMuestra" className="text-sm text-muted-foreground">Guía Muestra</label><input type="text" id="guiaMuestra" name="guiaMuestra" value={formData.guiaMuestra} onChange={handleChange} className="w-full mt-1 p-2 border rounded-md bg-background border-input"/></div>

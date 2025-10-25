@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { ThreshingOrder, ThreshingOrderReceipt, ContractLot, Contract } from '../types';
@@ -51,7 +53,7 @@ const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ o
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose}>
             <div className="bg-card p-6 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 pb-4 border-b">
-                    <h3 className="text-xl font-bold text-foreground">Detalle de Orden de Trilla: <span className="text-blue-600">{order.orderNumber}</span></h3>
+                    <h3 className="text-xl font-bold text-foreground">Detalle de Orden de Trilla: <span className="text-red-600 dark:text-red-500">{order.orderNumber}</span></h3>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-2xl leading-none">&times;</button>
                 </div>
                 
@@ -113,7 +115,7 @@ const ThreshingOrderDetailModal: React.FC<ThreshingOrderDetailModalProps> = ({ o
                                 ) : receipts.map(r => (
                                     <tr key={r.id} className="border-b border-border">
                                         <td className="px-4 py-3 font-semibold">{r.inputType}</td>
-                                        <td className="px-4 py-3 font-semibold text-green-600">{r.receiptNumber}</td>
+                                        <td className="px-4 py-3 font-semibold text-red-600 dark:text-red-500">{r.receiptNumber}</td>
                                         <td className="px-4 py-3">{r.supplierName || 'N/A'}</td>
                                         <td className="px-4 py-3 text-right">{r.amountToThresh.toFixed(2)}</td>
                                         <td className="px-4 py-3 text-right">{r.primeras.toFixed(2)}</td>

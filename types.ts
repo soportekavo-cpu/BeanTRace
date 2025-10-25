@@ -1,4 +1,6 @@
-// FIX: Removed self-import of `PagePermissions` which was causing a conflict with the local interface definition.
+
+
+
 export interface PagePermissions {
     view: boolean;
     add: boolean;
@@ -6,6 +8,10 @@ export interface PagePermissions {
     delete: boolean;
     viewCosts?: boolean;
     viewAnalysis?: boolean;
+    viewPrices?: boolean;
+    editEntrada?: boolean;
+    editSalida?: boolean;
+    canFinalize?: boolean;
 }
 
 export interface Log {
@@ -28,6 +34,7 @@ export type AppUserRole = 'Admin' | 'Manager' | 'User';
 
 export interface AppUser {
     id?: string;
+    name?: string;
     email: string;
     role: AppUserRole;
 }
@@ -35,6 +42,7 @@ export interface AppUser {
 export interface User {
     uid: string;
     email: string;
+    name: string;
     role: string;
 }
 
@@ -42,6 +50,7 @@ export interface Exporter {
     id: string;
     name: string;
     licenseNumber: string;
+    logo?: string;
 }
 
 export interface Buyer {
@@ -85,6 +94,8 @@ export interface Contract {
     certifications: string[];
     isServiceContract?: boolean;
     añoCosecha?: string;
+    contractPdf?: string;
+    instructionsPdf?: string;
 }
 
 export interface ContractLot {
@@ -139,8 +150,7 @@ export interface PurchaseReceipt {
     gPrimera: number;
     gRechazo: number;
     precioCatadura: number;
-    pesoBrutoEnvio: number;
-    reciboDevuelto: boolean;
+    pesoNetoEnvio: number;
     notas: string;
     cuppingProfile: CuppingProfile;
     status: 'Activo' | 'Anulado';
@@ -157,6 +167,7 @@ export interface PurchaseReceipt {
     trillado: number;
     enBodega: number;
     devuelto: number;
+    pdfEnvio?: string;
 }
 
 export interface ThreshingOrder {
@@ -177,6 +188,7 @@ export interface ThreshingOrder {
     tipoPreparacion?: string;
     pesoVendido?: number;
     tipoCafe?: 'Lavado' | 'Natural';
+    isFinished?: boolean;
 }
 
 export interface ThreshingOrderReceipt {
@@ -231,6 +243,8 @@ export interface Rendimiento {
     totalProyectadoCatadura: number;
     totalRealPrimeras: number;
     totalRealCatadura: number;
+    notes?: string;
+    isFinalizado?: boolean;
 }
 
 export interface Reproceso {
@@ -245,6 +259,7 @@ export interface Reproceso {
     merma: number;
     notes: string;
     status: 'Activo' | 'Anulado';
+    isFinalizado?: boolean;
     inputVignetteProjections?: Record<string, { porcentajePrimeras: number; porcentajeCatadura: number }>;
     totalProyectadoPrimeras?: number;
     totalProyectadoCatadura?: number;
@@ -270,6 +285,7 @@ export interface Mezcla {
     cantidadDespachada: number;
     sobranteEnBodega: number;
     status: 'Activo' | 'Despachado Parcialmente' | 'Agotado';
+    notes?: string;
 }
 
 export interface SalidaMezclaInput {
@@ -279,6 +295,8 @@ export interface SalidaMezclaInput {
     descripcionEnvio: string;
     sacosYute: number;
     sacosNylon: number;
+    tara: number;
+    pesoBruto: number;
 }
 
 export interface SalidaReciboInput {
@@ -290,6 +308,8 @@ export interface SalidaReciboInput {
     descripcionDevolucion: string;
     sacosYute: number;
     sacosNylon: number;
+    tara: number;
+    pesoBruto: number;
 }
 
 export interface Salida {
@@ -327,4 +347,22 @@ export interface Salida {
 export interface Seller {
     id: string;
     name: string;
+}
+
+export interface CategorizedResults {
+    contracts?: Contract[];
+    contractLots?: ContractLot[];
+    purchaseReceipts?: PurchaseReceipt[];
+    threshingOrders?: ThreshingOrder[];
+    rendimientos?: Rendimiento[];
+    reprocesos?: Reproceso[];
+    mezclas?: Mezcla[];
+    salidas?: Salida[];
+    vignettes?: Viñeta[];
+}
+
+export interface NotificationSetting {
+  id: string;
+  event: 'new-receipt' | 'new-salida' | 'new-threshing-order' | 'update-threshing-order' | 'void-threshing-order';
+  emails: string;
 }

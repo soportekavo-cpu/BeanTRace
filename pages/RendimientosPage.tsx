@@ -1,6 +1,8 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Rendimiento, ThreshingOrder, Viñeta, Reproceso, ByproductType, Contract, ContractLot, Client } from '../types';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
@@ -16,6 +18,7 @@ import { printComponent } from '../utils/printUtils';
 import RendimientoPDF from '../components/RendimientoPDF';
 import ReprocesoPDF from '../components/ReprocesoPDF';
 import ToggleSwitch from '../components/ToggleSwitch';
+import { useHighlight } from '../contexts/HighlightContext';
 
 const formatDate = (dateString: string) => {
     if (!dateString || !dateString.includes('-')) return '';
@@ -143,6 +146,7 @@ const RendimientosPage: React.FC = () => {
     const [reprocesoToEdit, setReprocesoToEdit] = useState<Reproceso | null>(null);
     const [reprocesoToView, setReprocesoToView] = useState<Reproceso | null>(null);
     const [reprocesoToDelete, setReprocesoToDelete] = useState<Reproceso | null>(null);
+    const { targetId, highlightTab, clearHighlight } = useHighlight();
     
     const fetchData = async () => {
         setLoading(true);
@@ -183,9 +187,55 @@ const RendimientosPage: React.FC = () => {
         const handleDataChange = (event: Event) => {
             fetchData();
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
+
+    useEffect(() => {
+        if (highlightTab) {
+            setActiveTab(highlightTab as RendimientoTab);
+        }
+    }, [highlightTab]);
+    
+    useEffect(() => {
+        if (targetId && !loading) {
+            const element = document.querySelector(`[data-id="${targetId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-row');
+                setTimeout(() => {
+                    element.classList.remove('highlight-row');
+                    clearHighlight();
+                }, 4500);
+            } else {
+                clearHighlight();
+            }
+        }
+    }, [targetId, rendimientos, reprocesos, loading, activeTab, clearHighlight]);
+
+    const handleDeleteRendimiento = async () => {
+        if (!rendimientoToDelete) return;
+
+        const isAnyVignetteUsed = rendimientoToDelete.vignettes.some(
+            v => v.status !== 'En Bodega'
+        );
+    
+        if (isAnyVignetteUsed) {
+            alert(
+                `No se puede anular el rendimiento '${rendimientoToDelete.rendimientoNumber}' porque una o más de sus viñetas ya han sido utilizadas en una mezcla, reproceso, o salida. Anule los procesos posteriores primero para liberar las viñetas.`
+            );
+            setRendimientoToDelete(null);
+            return;
+        }
+
+        try {
+            await api.deleteDocument('rendimientos', rendimientoToDelete.id);
+            setRendimientoToDelete(null);
+        } catch (error) {
+            console.error("Error deleting rendimiento:", error);
+            alert("No se pudo anular el rendimiento.");
+        }
+    };
 
     const handleDeleteReproceso = async (reproceso: Reproceso) => {
         if (!reproceso) return;
@@ -308,9 +358,9 @@ const RendimientosPage: React.FC = () => {
                         <p>Cargando datos...</p>
                     ) : (
                         <>
-                            {activeTab === 'resumen' && <ResumenRendimientosTab rendimientos={rendimientos} threshingOrders={threshingOrders} setView={setView} setItemToEdit={setRendimientoToEdit} setItemToView={setRendimientoToView} setItemToDelete={setRendimientoToDelete} permissions={permissions} />}
+                            {activeTab === 'resumen' && <ResumenRendimientosTab rendimientos={rendimientos} threshingOrders={threshingOrders} setView={setView} setItemToEdit={setRendimientoToEdit} setItemToView={setRendimientoToView} setItemToDelete={setRendimientoToDelete} permissions={permissions} roleDetails={roleDetails} contracts={contracts} lots={lots} />}
                             {activeTab === 'inventario' && <InventarioVignettesTab rendimientos={rendimientos} reprocesos={reprocesos} threshingOrders={threshingOrders} contracts={contracts} lots={lots} clients={clients} byproductTypes={byproductTypes} />}
-                            {activeTab === 'reprocesos' && <ReprocesosTab reprocesos={reprocesos} setView={setView} setItemToEdit={setReprocesoToEdit} setItemToView={setReprocesoToView} setItemToDelete={setReprocesoToDelete} permissions={permissions} />}
+                            {activeTab === 'reprocesos' && <ReprocesosTab reprocesos={reprocesos} setView={setView} setItemToEdit={setReprocesoToEdit} setItemToView={setReprocesoToView} setItemToDelete={setReprocesoToDelete} permissions={permissions} roleDetails={roleDetails} />}
                         </>
                     )}
                 </div>
@@ -318,7 +368,7 @@ const RendimientosPage: React.FC = () => {
 
             {/* Modals */}
             {rendimientoToView && <RendimientoDetailModal rendimiento={rendimientoToView} threshingOrders={threshingOrders} onClose={() => setRendimientoToView(null)} />}
-            {rendimientoToDelete && <ConfirmDeleteModal type="Rendimiento" item={rendimientoToDelete} onCancel={() => setRendimientoToDelete(null)} onConfirm={() => { api.deleteDocument('rendimientos', rendimientoToDelete!.id); setRendimientoToDelete(null); }} />}
+            {rendimientoToDelete && <ConfirmDeleteModal type="Rendimiento" item={rendimientoToDelete} onCancel={() => setRendimientoToDelete(null)} onConfirm={handleDeleteRendimiento} />}
             {reprocesoToView && <ReprocesoDetailModal reproceso={reprocesoToView} onClose={() => setReprocesoToView(null)} />}
             {reprocesoToDelete && <ConfirmDeleteModal type="Reproceso" item={reprocesoToDelete} onCancel={() => setReprocesoToDelete(null)} onConfirm={() => handleDeleteReproceso(reprocesoToDelete)} />}
         </div>
@@ -327,17 +377,29 @@ const RendimientosPage: React.FC = () => {
 
 // --- TAB COMPONENTS ---
 
-const ResumenRendimientosTab: React.FC<any> = ({ rendimientos, threshingOrders, setView, setItemToEdit, setItemToView, setItemToDelete, permissions }) => {
+const ResumenRendimientosTab: React.FC<any> = ({ rendimientos, threshingOrders, setView, setItemToEdit, setItemToView, setItemToDelete, permissions, roleDetails, contracts, lots }) => {
+    const [showOnlyActive, setShowOnlyActive] = useState(true);
     
+    const filteredRendimientos = useMemo(() => {
+        if (showOnlyActive) {
+            return rendimientos.filter((item: Rendimiento) => !item.isFinalizado);
+        }
+        return rendimientos;
+    }, [rendimientos, showOnlyActive]);
+
     const handlePrintClick = (e: React.MouseEvent, item: Rendimiento) => {
         e.stopPropagation();
         const relatedOrders = threshingOrders.filter((o: ThreshingOrder) => item.threshingOrderIds.includes(o.id));
-        printComponent(<RendimientoPDF rendimiento={item} threshingOrders={relatedOrders} />, `Rendimiento-${item.rendimientoNumber}`);
+        printComponent(<RendimientoPDF rendimiento={item} threshingOrders={relatedOrders} contracts={contracts} contractLots={lots} />, `Rendimiento-${item.rendimientoNumber}`);
     };
 
     return (
         <div>
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-between items-center mb-4">
+                 <div className="flex items-center gap-2">
+                    <ToggleSwitch id="showOnlyActiveRend" checked={showOnlyActive} onChange={setShowOnlyActive} />
+                    <label htmlFor="showOnlyActiveRend" className="text-sm font-medium text-muted-foreground select-none">Mostrar solo activos</label>
+                </div>
                 {permissions?.add && <button onClick={() => { setItemToEdit(null); setView('rendimientoForm'); }} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"><PlusIcon className="w-4 h-4" /> Crear Rendimiento</button>}
             </div>
              <div className="overflow-x-auto">
@@ -354,11 +416,11 @@ const ResumenRendimientosTab: React.FC<any> = ({ rendimientos, threshingOrders, 
                         </tr>
                     </thead>
                     <tbody>
-                        {rendimientos.map((item: Rendimiento) => {
+                        {filteredRendimientos.map((item: Rendimiento) => {
                                 const difference = item.totalRealPrimeras - item.totalProyectadoPrimeras;
                                 const orderNumbers = item.threshingOrderIds.map(id => threshingOrders.find((o: ThreshingOrder) => o.id === id)?.orderNumber || id).join(', ');
                                 return (
-                                <tr key={item.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setItemToView(item)}>
+                                <tr data-id={item.id} key={item.id} className={`border-b border-border transition-colors ${item.isFinalizado ? 'opacity-60 bg-muted/30' : 'hover:bg-muted/50'} cursor-pointer`} onClick={() => setItemToView(item)}>
                                     <td className="px-6 py-4">{formatDate(item.creationDate)}</td>
                                     <td className="px-6 py-4 font-medium text-foreground">{item.rendimientoNumber}</td>
                                     <td className="px-6 py-4">{orderNumbers}</td>
@@ -367,7 +429,7 @@ const ResumenRendimientosTab: React.FC<any> = ({ rendimientos, threshingOrders, 
                                     <td className={`px-6 py-4 text-right font-bold ${difference < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{difference.toFixed(2)}</td>
                                     <td className="px-6 py-4"><div className="flex items-center justify-center gap-4">
                                         <button className="text-blue-500 hover:text-blue-700" title="Ver Detalle"><EyeIcon className="w-5 h-5" /></button>
-                                        {permissions?.edit && <button className="text-yellow-500 hover:text-yellow-700" title="Editar" onClick={(e) => { e.stopPropagation(); setItemToEdit(item); setView('rendimientoForm');}}><PencilIcon className="w-4 h-4" /></button>}
+                                        {permissions?.edit && <button disabled={item.isFinalizado && roleDetails?.name !== 'Admin'} className="text-yellow-500 hover:text-yellow-700 disabled:text-gray-400 disabled:cursor-not-allowed" title={item.isFinalizado && roleDetails?.name !== 'Admin' ? 'Finalizado (Solo Admin puede editar)' : 'Editar'} onClick={(e) => { e.stopPropagation(); setItemToEdit(item); setView('rendimientoForm');}}><PencilIcon className="w-4 h-4" /></button>}
                                         <button className="text-gray-500 hover:text-gray-700" title="Imprimir" onClick={(e) => handlePrintClick(e, item)}><PrinterIcon className="w-4 h-4" /></button>
                                         {permissions?.delete && <button className="text-red-500 hover:text-red-700" title="Anular" onClick={(e) => { e.stopPropagation(); setItemToDelete(item);}}><TrashIcon className="w-4 h-4" /></button>}
                                     </div></td>
@@ -380,7 +442,15 @@ const ResumenRendimientosTab: React.FC<any> = ({ rendimientos, threshingOrders, 
     )
 }
 
-const ReprocesosTab: React.FC<any> = ({ reprocesos, setView, setItemToEdit, setItemToView, setItemToDelete, permissions }) => {
+const ReprocesosTab: React.FC<any> = ({ reprocesos, setView, setItemToEdit, setItemToView, setItemToDelete, permissions, roleDetails }) => {
+    const [showOnlyActive, setShowOnlyActive] = useState(true);
+
+    const filteredReprocesos = useMemo(() => {
+        if (showOnlyActive) {
+            return reprocesos.filter((item: Reproceso) => !item.isFinalizado && item.status !== 'Anulado');
+        }
+        return reprocesos;
+    }, [reprocesos, showOnlyActive]);
 
     const handlePrintClick = (e: React.MouseEvent, item: Reproceso) => {
         e.stopPropagation();
@@ -389,15 +459,19 @@ const ReprocesosTab: React.FC<any> = ({ reprocesos, setView, setItemToEdit, setI
     
     return (
         <div>
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-between items-center mb-4">
+                 <div className="flex items-center gap-2">
+                    <ToggleSwitch id="showOnlyActiveRep" checked={showOnlyActive} onChange={setShowOnlyActive} />
+                    <label htmlFor="showOnlyActiveRep" className="text-sm font-medium text-muted-foreground select-none">Mostrar solo activos</label>
+                </div>
                 {permissions?.add && <button onClick={() => { setItemToEdit(null); setView('reprocesoForm'); }} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700"><PlusIcon className="w-4 h-4" /> Crear Reproceso</button>}
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="text-xs uppercase bg-muted"><tr><th className="px-6 py-3">Fecha</th><th className="px-6 py-3">No. Reproceso</th><th className="px-6 py-3 text-right">Peso Entrada</th><th className="px-6 py-3 text-right">Peso Salida</th><th className="px-6 py-3 text-right">Merma</th><th className="px-6 py-3 text-center">Acciones</th></tr></thead>
                     <tbody>
-                        {reprocesos.map((item: Reproceso) => (
-                             <tr key={item.id} className={`border-b hover:bg-muted/50 cursor-pointer ${item.status === 'Anulado' ? 'bg-red-500/10 text-muted-foreground line-through' : ''}`} onClick={() => setItemToView(item)}>
+                        {filteredReprocesos.map((item: Reproceso) => (
+                             <tr data-id={item.id} key={item.id} className={`border-b transition-colors ${item.status === 'Anulado' ? 'bg-red-500/10 text-muted-foreground line-through' : (item.isFinalizado ? 'opacity-60 bg-muted/30' : 'hover:bg-muted/50')} cursor-pointer`} onClick={() => setItemToView(item)}>
                                 <td className="px-6 py-4">{formatDate(item.creationDate)}</td>
                                 <td className="px-6 py-4 font-semibold text-purple-600">{item.reprocesoNumber}</td>
                                 <td className="px-6 py-4 text-right">{item.totalInputWeight.toFixed(2)}</td>
@@ -405,7 +479,7 @@ const ReprocesosTab: React.FC<any> = ({ reprocesos, setView, setItemToEdit, setI
                                 <td className={`px-6 py-4 text-right font-bold ${item.merma > 0.005 ? 'text-red-500' : 'text-green-600'}`}>{item.merma.toFixed(2)}</td>
                                 <td className="px-6 py-4"><div className="flex items-center justify-center gap-4">
                                     <button className="text-blue-500 hover:text-blue-700" title="Ver Detalle"><EyeIcon className="w-5 h-5" /></button>
-                                    {permissions?.edit && <button disabled={item.status === 'Anulado'} className="text-yellow-500 hover:text-yellow-700 disabled:text-gray-400" title="Editar" onClick={(e) => { e.stopPropagation(); setItemToEdit(item); setView('reprocesoForm');}}><PencilIcon className="w-4 h-4" /></button>}
+                                    {permissions?.edit && <button disabled={(item.isFinalizado && roleDetails?.name !== 'Admin') || item.status === 'Anulado'} className="text-yellow-500 hover:text-yellow-700 disabled:text-gray-400 disabled:cursor-not-allowed" title={(item.isFinalizado && roleDetails?.name !== 'Admin') ? 'Finalizado (Solo Admin puede editar)' : 'Editar'} onClick={(e) => { e.stopPropagation(); setItemToEdit(item); setView('reprocesoForm');}}><PencilIcon className="w-4 h-4" /></button>}
                                     <button disabled={item.status === 'Anulado'} className="text-gray-500 hover:text-gray-700 disabled:text-gray-400" title="Imprimir" onClick={(e) => handlePrintClick(e, item)}><PrinterIcon className="w-4 h-4" /></button>
                                     {permissions?.delete && <button disabled={item.status === 'Anulado'} className="text-red-500 hover:text-red-700 disabled:text-gray-400" title="Eliminar" onClick={(e) => { e.stopPropagation(); setItemToDelete(item);}}><TrashIcon className="w-4 h-4" /></button>}
                                 </div></td>
@@ -500,7 +574,7 @@ const InventarioVignettesTab: React.FC<any> = ({ rendimientos, reprocesos, thres
             const contratoCliente = v.contract?.contractNumber || v.client?.name || 'N/A';
             const pesoOriginal = v.originalPesoNeto || v.pesoNeto;
             const pesoUsado = Number(pesoOriginal) - Number(v.pesoNeto);
-            // FIX: Cast to Number to ensure toFixed method is available
+            
             return [
                 formatDate(v.creationDate),
                 `"${v.numeroViñeta}"`,
@@ -564,7 +638,7 @@ const InventarioVignettesTab: React.FC<any> = ({ rendimientos, reprocesos, thres
                             const pesoOriginal = v.originalPesoNeto || v.pesoNeto;
                             const pesoUsado = pesoOriginal - v.pesoNeto;
                             return (
-                            <tr key={v.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedVignette(v)}>
+                            <tr data-id={v.id} key={v.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedVignette(v)}>
                                 <td className="p-2 align-middle">{formatDate(v.creationDate)}</td>
                                 <td className="p-2 align-middle font-semibold text-red-600">{v.numeroViñeta}</td>
                                 <td className="p-2 align-middle">{v.tipo}</td>
@@ -634,7 +708,7 @@ const ConfirmDeleteModal: React.FC<{
             <div className="bg-card p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
                 <h3 className="text-lg font-bold text-foreground">Confirmar Anulación</h3>
                 <p className="text-muted-foreground mt-2 text-sm">
-                    ¿Estás seguro de anular el {type.toLowerCase()} <strong>{number}</strong>? Esta acción revertirá el estado de las viñetas involucradas.
+                    ¿Estás seguro de anular el {type.toLowerCase()} <strong>{number}</strong>? Esta acción no se puede deshacer y puede afectar la integridad de los datos si las viñetas ya han sido utilizadas.
                 </p>
                 <div className="mt-6 flex justify-end gap-4">
                     <button onClick={onCancel} className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">

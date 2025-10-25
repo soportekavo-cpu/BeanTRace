@@ -1,11 +1,26 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso } from '../types';
+import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso, NotificationSetting } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import CheckIcon from './icons/CheckIcon';
 import { printComponent } from '../utils/printUtils';
 import ThreshingOrderPDF from './ThreshingOrderPDF';
+import { useToast } from '../hooks/useToast';
 
 interface ThreshingOrderFormProps {
     contract: Contract;
@@ -33,6 +48,7 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const { addToast } = useToast();
     
     const [inputRows, setInputRows] = useState<InputRow[]>([{ id: `row_${Date.now()}`, inputType: 'Recibo', sourceId: '', amountToThresh: 0 }]);
     
@@ -164,10 +180,8 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
             if (row.inputType === 'Recibo') {
                 const receipt = availableReceipts.find(r => r.id === row.sourceId);
                 if (receipt) {
-                    // FIX: Explicitly cast to Number to avoid potential type errors with arithmetic operations.
-                    primeras = amount * (Number(receipt.rendimientoPrimera) / 100);
-                    // FIX: Explicitly cast to Number to avoid potential type errors with arithmetic operations.
-                    catadura = amount * (Number(receipt.rendimientoRechazo) / 100);
+                    primeras = amount * ((Number(receipt.rendimientoPrimera) || 0) / 100);
+                    catadura = amount * ((Number(receipt.rendimientoRechazo) || 0) / 100);
                     sourceInfo = {
                         supplierName: suppliers.find(s => s.id === receipt.proveedorId)?.name || 'N/A',
                         coffeeType: receipt.tipo === 'Otro' ? receipt.customTipo : receipt.tipo
@@ -200,9 +214,20 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
         return { neededPrimeras, totalToThresh, totalPrimeras, totalCatadura, difference, detailedRows };
     }, [selectedLotIds, inputRows, availableReceipts, availableVignettes, availableMezclas, contractLots, suppliers]);
 
+    const triggerNotificationSimulation = async (order: ThreshingOrder) => {
+        try {
+            const settings = await api.getCollection<NotificationSetting>('notifications', s => s.event === 'new-threshing-order');
+            if (settings.length > 0 && settings[0].emails) {
+                addToast(`Simulación de Notificación: Correo enviado a ${settings[0].emails} por la nueva orden de trilla ${order.orderNumber}.`, 'info');
+            }
+        } catch (error) {
+            console.error("Failed to check for notification settings:", error);
+        }
+    };
+
     const handleSave = async () => {
         if (selectedLotIds.size === 0 || inputRows.some(row => !row.sourceId || row.amountToThresh <= 0)) {
-            alert('Por favor, completa toda la información requerida.');
+            addToast('Por favor, selecciona partidas y asegúrate de que todos los insumos tengan una fuente y una cantidad mayor a cero.', 'error');
             return;
         }
 
@@ -217,6 +242,7 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
                 contractId: contract.id, orderNumber, creationDate: new Date().toISOString().split('T')[0], lotIds: Array.from(selectedLotIds), notes: '', totalToThresh: calculations.totalToThresh, totalPrimeras: calculations.totalPrimeras, totalCatadura: calculations.totalCatadura, orderType: 'Exportación',
             };
             const newOrder = await api.addDocument<ThreshingOrder>('threshingOrders', newOrderData);
+            await triggerNotificationSimulation(newOrder);
 
             const orderReceiptsForPdf: ThreshingOrderReceipt[] = [];
             const inventoryUpdatePromises: Promise<any>[] = [];
@@ -239,7 +265,10 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
                 if (row.inputType === 'Recibo') {
                     const receipt = availableReceipts.find(r => r.id === row.sourceId);
                     if (receipt) {
+                        // FIX: Ensure operands are numbers before arithmetic operations.
                         inventoryUpdatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', receipt.id, {
+// @FIX: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+// Ensured operands are numbers before arithmetic operations to prevent potential runtime errors with data from localStorage.
                             trillado: (Number(receipt.trillado) || 0) + (Number(row.amountToThresh) || 0),
                             enBodega: (Number(receipt.enBodega) || 0) - (Number(row.amountToThresh) || 0),
                         }));
@@ -247,8 +276,9 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
                 } else if (row.inputType === 'Mezcla') {
                     const mezcla = availableMezclas.find(m => m.id === row.sourceId);
                     if (mezcla) {
-                        const newDespachado = (Number(mezcla.cantidadDespachada) || 0) + (Number(row.amountToThresh) || 0);
-                        const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) - (Number(row.amountToThresh) || 0);
+                        const amountToThreshNum = Number(row.amountToThresh) || 0;
+                        const newDespachado = (Number(mezcla.cantidadDespachada) || 0) + amountToThreshNum;
+                        const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) - amountToThreshNum;
                         const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : 'Despachado Parcialmente';
 
                         inventoryUpdatePromises.push(api.updateDocument<Mezcla>('mezclas', mezcla.id, {
@@ -292,7 +322,7 @@ const ThreshingOrderForm: React.FC<ThreshingOrderFormProps> = ({ contract, contr
 
         } catch (error) {
             console.error("Error saving threshing order:", error);
-            alert("Hubo un error al guardar la orden.");
+            addToast("Hubo un error al guardar la orden.", "error");
         } finally {
             setIsSaving(false);
         }

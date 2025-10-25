@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import api from '../services/localStorageManager';
 import { Contract, Exporter, Buyer } from '../types';
 import CheckIcon from '../components/icons/CheckIcon';
 import ToggleSwitch from '../components/ToggleSwitch';
-import { getCurrentHarvestYear } from '../utils/harvestYear';
+import TrashIcon from '../components/icons/TrashIcon';
 
 interface CreateContractPageProps {
   onCancel: () => void;
@@ -18,6 +19,7 @@ const InputField: React.FC<{ label: string, id: string, type?: string, value: st
     <input
       type={type}
       id={id}
+      name={id}
       value={value}
       onChange={onChange}
       required={required}
@@ -32,15 +34,14 @@ const allMonths = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio
 
 const getSuggestedMarketMonth = () => {
     const currentMonth = new Date().getMonth(); // 0-11
-    // Map market months to their index
-    const marketMonthIndices = { 'Marzo': 2, 'Mayo': 4, 'Julio': 6, 'Septiembre': 8, 'Diciembre': 11 };
+    const marketMonthIndices: { [key: string]: number } = { 'Marzo': 2, 'Mayo': 4, 'Julio': 6, 'Septiembre': 8, 'Diciembre': 11 };
     
     for (const month of marketMonths) {
         if (marketMonthIndices[month as keyof typeof marketMonthIndices] > currentMonth) {
             return month;
         }
     }
-    return 'Marzo'; // Default to next year's first market month
+    return 'Marzo';
 };
 
 
@@ -63,6 +64,9 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [contractPdfFile, setContractPdfFile] = useState<{name: string, data: string} | null>(null);
+  const [instructionsPdfFile, setInstructionsPdfFile] = useState<{name: string, data: string} | null>(null);
 
   useEffect(() => {
     const fetchExportersAndBuyers = async () => {
@@ -93,6 +97,26 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         ? prev.filter(c => c !== cert) 
         : [...prev, cert]
     );
+  };
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fileType: 'contract' | 'instructions') => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              const base64String = reader.result?.toString().split(',')[1];
+              if (base64String) {
+                  const fileData = { name: file.name, data: base64String };
+                  if (fileType === 'contract') {
+                      setContractPdfFile(fileData);
+                  } else {
+                      setInstructionsPdfFile(fileData);
+                  }
+              }
+          };
+          reader.readAsDataURL(file);
+      }
+      e.target.value = '';
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,6 +153,8 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
         certifications,
         isServiceContract,
         añoCosecha: harvestYear,
+        contractPdf: contractPdfFile?.data,
+        instructionsPdf: instructionsPdfFile?.data,
       };
 
       await api.addDocument<Contract>('contracts', newContract);
@@ -252,13 +278,27 @@ const CreateContractPage: React.FC<CreateContractPageProps> = ({ onCancel, onSav
                 </div>
 
                 <div className="space-y-4">
-                     <div>
-                      <label htmlFor="contractPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Contrato</label>
-                      <input type="file" id="contractPdf" accept=".pdf" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                    <div>
+                        <label htmlFor="contractPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Contrato</label>
+                        {!contractPdfFile ? (
+                            <input type="file" id="contractPdf" accept=".pdf" onChange={(e) => handleFileChange(e, 'contract')} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                        ) : (
+                            <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                                <span className="text-sm text-foreground truncate">{contractPdfFile.name}</span>
+                                <button type="button" onClick={() => setContractPdfFile(null)} className="p-1 text-red-500 hover:bg-red-100 rounded-full"><TrashIcon className="w-4 h-4"/></button>
+                            </div>
+                        )}
                     </div>
                     <div>
-                      <label htmlFor="instructionsPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Instrucciones</label>
-                      <input type="file" id="instructionsPdf" accept=".pdf" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                        <label htmlFor="instructionsPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Instrucciones</label>
+                        {!instructionsPdfFile ? (
+                            <input type="file" id="instructionsPdf" accept=".pdf" onChange={(e) => handleFileChange(e, 'instructions')} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                        ) : (
+                            <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                                <span className="text-sm text-foreground truncate">{instructionsPdfFile.name}</span>
+                                <button type="button" onClick={() => setInstructionsPdfFile(null)} className="p-1 text-red-500 hover:bg-red-100 rounded-full"><TrashIcon className="w-4 h-4"/></button>
+                            </div>
+                        )}
                     </div>
                 </div>
            </div>

@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { Mezcla } from '../types';
 
@@ -17,7 +19,7 @@ const MezclaPDF: React.FC<MezclaPDFProps> = ({ mezcla }) => {
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #7C3AED', paddingBottom: '15px' }}>
                 <div>
                     <h1 style={{ color: '#7C3AED', margin: 0, fontSize: '28px' }}>Reporte de Mezcla</h1>
-                    <p style={{ margin: '5px 0 0 0', fontSize: '16px' }}><strong>No. Mezcla:</strong> {mezcla.mezclaNumber}</p>
+                    <p style={{ margin: '5px 0 0 0', fontSize: '16px' }}><strong>No. Mezcla:</strong> <span style={{ color: '#DC2626' }}>{mezcla.mezclaNumber}</span></p>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '14px' }}>
                     <p style={{ margin: 0 }}><strong>Fecha:</strong> {formatDate(mezcla.creationDate)}</p>
@@ -38,7 +40,7 @@ const MezclaPDF: React.FC<MezclaPDFProps> = ({ mezcla }) => {
                     <tbody>
                         {mezcla.inputVignettesData.map(v => (
                             <tr key={v.vignetteId}>
-                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{v.vignetteNumber}</td>
+                                <td style={{ padding: '10px', border: '1px solid #ddd', color: '#DC2626' }}>{v.vignetteNumber}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd' }}>{v.tipo}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{v.pesoUtilizado.toFixed(2)}</td>
                             </tr>

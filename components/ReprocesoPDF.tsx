@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { Reproceso } from '../types';
 
@@ -17,7 +19,7 @@ const ReprocesoPDF: React.FC<ReprocesoPDFProps> = ({ reproceso }) => {
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #7C3AED', paddingBottom: '15px' }}>
                 <div>
                     <h1 style={{ color: '#7C3AED', margin: 0, fontSize: '28px' }}>Reporte de Reproceso</h1>
-                    <p style={{ margin: '5px 0 0 0', fontSize: '16px' }}><strong>No. Reproceso:</strong> {reproceso.reprocesoNumber}</p>
+                    <p style={{ margin: '5px 0 0 0', fontSize: '16px' }}><strong>No. Reproceso:</strong> <span style={{ color: '#DC2626' }}>{reproceso.reprocesoNumber}</span></p>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '14px' }}>
                     <p style={{ margin: 0 }}><strong>Fecha:</strong> {formatDate(reproceso.creationDate)}</p>
@@ -75,7 +77,7 @@ const ReprocesoPDF: React.FC<ReprocesoPDFProps> = ({ reproceso }) => {
                     <tbody>
                         {reproceso.inputVignettesData.map(v => (
                             <tr key={v.id}>
-                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{v.numeroViñeta}</td>
+                                <td style={{ padding: '10px', border: '1px solid #ddd', color: '#DC2626' }}>{v.numeroViñeta}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd' }}>{v.tipo}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{v.pesoNeto.toFixed(2)}</td>
                             </tr>
@@ -97,7 +99,7 @@ const ReprocesoPDF: React.FC<ReprocesoPDFProps> = ({ reproceso }) => {
                     <tbody>
                         {reproceso.outputVignettes.map(v => (
                             <tr key={v.id}>
-                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{v.numeroViñeta}</td>
+                                <td style={{ padding: '10px', border: '1px solid #ddd', color: '#DC2626' }}>{v.numeroViñeta}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd' }}>{v.tipo}</td>
                                 <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'right' }}>{(v.originalPesoNeto || v.pesoNeto).toFixed(2)}</td>
                             </tr>
@@ -126,15 +128,6 @@ const ReprocesoPDF: React.FC<ReprocesoPDFProps> = ({ reproceso }) => {
                     <p style={{whiteSpace: 'pre-wrap'}}>{reproceso.notes}</p>
                 </section>
              )}
-
-            <footer style={{ position: 'absolute', bottom: '40px', width: 'calc(100% - 80px)', paddingTop: '20px', display: 'flex', justifyContent: 'space-around', fontSize: '14px', borderTop: '1px solid #ccc' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <p style={{ borderTop: '1px solid #333', paddingTop: '10px', width: '250px' }}>Revisado Por</p>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                    <p style={{ borderTop: '1px solid #333', paddingTop: '10px', width: '250px' }}>Autorizado Por</p>
-                </div>
-            </footer>
         </div>
     );
 };

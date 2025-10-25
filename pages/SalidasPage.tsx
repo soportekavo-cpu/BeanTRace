@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
-import { Salida, Mezcla, PurchaseReceipt, Client, Supplier } from '../types';
+import api from '../services/localStorageManager';
+import { Salida, Mezcla, PurchaseReceipt, Client, Supplier, Exporter } from '../types';
 import PlusIcon from '../components/icons/PlusIcon';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
@@ -10,6 +11,7 @@ import { printComponent } from '../utils/printUtils';
 import EyeIcon from '../components/icons/EyeIcon';
 import SalidaForm from '../components/SalidaForm';
 import SalidaPDF from '../components/SalidaPDF';
+import { useHighlight } from '../contexts/HighlightContext';
 
 const formatDate = (dateString: string) => {
     if (!dateString || !dateString.includes('-')) return '';
@@ -31,6 +33,7 @@ const SalidasPage: React.FC = () => {
     const [salidaToEdit, setSalidaToEdit] = useState<Salida | null>(null);
     const [salidaToView, setSalidaToView] = useState<Salida | null>(null);
     const [salidaToVoid, setSalidaToVoid] = useState<Salida | null>(null);
+    const { targetId, highlightTab, clearHighlight } = useHighlight();
 
 
     const fetchData = async () => {
@@ -48,9 +51,31 @@ const SalidasPage: React.FC = () => {
     useEffect(() => {
         fetchData();
         const handleDataChange = () => fetchData();
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
+
+    useEffect(() => {
+        if (highlightTab) {
+            setActiveTab(highlightTab as SalidaTab);
+        }
+    }, [highlightTab]);
+
+    useEffect(() => {
+        if (targetId && !loading) {
+            const element = document.querySelector(`[data-id="${targetId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-row');
+                setTimeout(() => {
+                    element.classList.remove('highlight-row');
+                    clearHighlight();
+                }, 4500);
+            } else {
+                clearHighlight();
+            }
+        }
+    }, [targetId, salidas, loading, activeTab]);
 
     const handleSaveSuccess = () => {
         setView('list');
@@ -96,9 +121,11 @@ const SalidasPage: React.FC = () => {
         }
     };
     
-    const handlePrintClick = (e: React.MouseEvent, salida: Salida) => {
+    const handlePrintClick = async (e: React.MouseEvent, salida: Salida) => {
         e.stopPropagation();
-        printComponent(<SalidaPDF salida={salida} />, `Envio-${salida.salidaNumber}`);
+        const exporters = await api.getCollection<Exporter>('exporters');
+        const dizano = exporters.find(e => e.name === 'Dizano, S.A.');
+        printComponent(<SalidaPDF salida={salida} exporterLogo={dizano?.logo} />, `Envio-${salida.salidaNumber}`);
     }
 
     const filteredSalidas = useMemo(() => {
@@ -170,7 +197,7 @@ const SalidasPage: React.FC = () => {
                                     ? salida.mezclas?.map(m => m.mezclaNumber).join(', ') 
                                     : salida.recibos?.map(r => r.reciboNumber).join(', ');
                                 return (
-                                <tr key={salida.id} className={`border-b border-border hover:bg-muted/50 cursor-pointer ${isVoided ? 'bg-red-500/10 text-muted-foreground line-through' : ''}`} onClick={() => setSalidaToView(salida)}>
+                                <tr key={salida.id} data-id={salida.id} className={`border-b border-border hover:bg-muted/50 cursor-pointer ${isVoided ? 'bg-red-500/10 text-muted-foreground line-through' : ''}`} onClick={() => setSalidaToView(salida)}>
                                     <td className="px-6 py-4">{formatDate(salida.fecha)}</td>
                                     <td className="px-6 py-4 font-medium text-purple-600">{salida.salidaNumber}</td>
                                     <td className="px-6 py-4 font-medium text-foreground">{productDescription}</td>
@@ -283,7 +310,7 @@ const SalidaDetailModal: React.FC<{ salida: Salida, onClose: () => void }> = ({ 
                                                 <td className="p-2 font-medium">{r.reciboNumber}</td>
                                                 <td className="p-2">{r.proveedorName}</td>
                                                 <td className="p-2">{r.tipoCafe}</td>
-                                                <td className="p-2 text-right font-semibold">{r.pesoDevuelto.toFixed(2)}</td>
+                                                <td className="p-2 text-right">{r.pesoDevuelto.toFixed(2)}</td>
                                             </tr>
                                         ))
                                     )}
@@ -291,25 +318,30 @@ const SalidaDetailModal: React.FC<{ salida: Salida, onClose: () => void }> = ({ 
                             </table>
                         </div>
                     </div>
-                    
+
                     <div>
-                         <h4 className="font-semibold text-lg text-red-600 mb-2">Resumen de Pesos</h4>
-                        <div className="grid grid-cols-2 gap-4 text-sm bg-muted/50 p-4 rounded-lg">
-                            <p><strong>Peso Neto Total:</strong> {salida.pesoNeto.toFixed(2)} qqs.</p>
-                            <p><strong>Tara Total:</strong> {salida.tara.toFixed(2)} qqs.</p>
+                        <h4 className="font-semibold text-lg text-purple-600 mb-2">Resumen de Pesos</h4>
+                        <div className="grid grid-cols-4 gap-4 text-sm bg-muted/50 p-4 rounded-lg">
                             <p><strong>Sacos Yute:</strong> {salida.sacosYute}</p>
                             <p><strong>Sacos Nylon:</strong> {salida.sacosNylon}</p>
-                            <p className="font-bold col-span-2 text-base pt-2 border-t mt-2"><strong>Peso Bruto Total:</strong> {salida.pesoBruto.toFixed(2)} qqs.</p>
+                            <p><strong>Tara:</strong> {salida.tara.toFixed(2)}</p>
+                            <p><strong>Peso Bruto:</strong> {salida.pesoBruto.toFixed(2)}</p>
+                            <p className="col-span-full font-bold text-lg text-green-600">Peso Neto Total: {salida.pesoNeto.toFixed(2)} qqs.</p>
                         </div>
                     </div>
+
+                    {salida.notas && (
+                        <div>
+                             <h4 className="font-semibold text-lg text-gray-600 mb-2">Notas</h4>
+                             <p className="text-sm p-3 bg-muted/50 rounded-md border">{salida.notas}</p>
+                        </div>
+                    )}
                 </div>
-                 <div className="flex-shrink-0 flex justify-end gap-4 mt-6 pt-4 border-t">
+                <div className="flex-shrink-0 flex justify-end gap-4 mt-6 pt-4 border-t">
                     <button onClick={onClose} className="px-6 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">Cerrar</button>
                 </div>
             </div>
         </div>
     );
 };
-
-
 export default SalidasPage;

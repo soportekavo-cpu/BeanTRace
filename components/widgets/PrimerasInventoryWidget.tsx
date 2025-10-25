@@ -7,16 +7,17 @@ const PrimerasInventoryWidget: React.FC<{ data: DashboardData; onWidgetClick: (t
     
     const chartData = useMemo(() => {
         const inventoryMap: Record<string, number> = {
-            'Primeras L.': 0,
-            'Primeras N.': 0
+            'L. Primeras': 0,
+            'N. Primeras': 0
         };
         
         data.vignettes.forEach(vignette => {
-            if ((vignette.status === 'En Bodega' || vignette.status === 'Mezclada Parcialmente') && vignette.pesoNeto > 0.005) {
-                if (vignette.tipo === 'Primeras L.') {
-                     inventoryMap['Primeras L.'] += vignette.pesoNeto;
-                } else if (vignette.tipo === 'Primeras N.') {
-                     inventoryMap['Primeras N.'] += vignette.pesoNeto;
+            const isInStock = (vignette.status === 'En Bodega' || vignette.status === 'Mezclada Parcialmente') && vignette.pesoNeto > 0.005;
+            if (isInStock) {
+                if (vignette.tipo === 'L. Primeras') {
+                     inventoryMap['L. Primeras'] += vignette.pesoNeto;
+                } else if (vignette.tipo === 'N. Primeras') {
+                     inventoryMap['N. Primeras'] += vignette.pesoNeto;
                 }
             }
         });

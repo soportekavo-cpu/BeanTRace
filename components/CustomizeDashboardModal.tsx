@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { WidgetKey } from '../pages/DashboardPage';
 import CheckIcon from './icons/CheckIcon';
@@ -35,7 +36,6 @@ const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = ({ allWi
                 <h3 className="text-lg font-bold text-foreground mb-4">Personalizar Dashboard</h3>
                 <p className="text-sm text-muted-foreground mb-6">Selecciona los módulos de información que quieres ver en tu dashboard.</p>
                 <div className="space-y-3">
-                    {/* FIX: Refactored to iterate over keys to resolve type inference issue with Object.entries. */}
                     {(Object.keys(allWidgets) as WidgetKey[]).map((key) => {
                         const widgetInfo = allWidgets[key];
                         const isSelected = selectedWidgets.has(key);

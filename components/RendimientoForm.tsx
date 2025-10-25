@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
 import { Rendimiento, ThreshingOrder, Viñeta, ByproductType, Contract, ContractLot, Reproceso } from '../types';
@@ -7,6 +10,10 @@ import TrashIcon from './icons/TrashIcon';
 import { printComponent } from '../utils/printUtils';
 import RendimientoPDF from './RendimientoPDF';
 import CheckIcon from './icons/CheckIcon';
+import ToggleSwitch from './ToggleSwitch';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
+
 
 interface RendimientoFormProps {
     existingRendimiento?: Rendimiento | null;
@@ -15,6 +22,8 @@ interface RendimientoFormProps {
 }
 
 const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, onCancel, onSaveSuccess }) => {
+    const { roleDetails } = useAuth();
+    const { addToast } = useToast();
     const isEditMode = !!existingRendimiento;
     const [availableOrders, setAvailableOrders] = useState<ThreshingOrder[]>([]);
     const [allContracts, setAllContracts] = useState<Contract[]>([]);
@@ -25,6 +34,8 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
 
     const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set(existingRendimiento?.threshingOrderIds || []));
     const [vignettes, setVignettes] = useState<Partial<Viñeta>[]>(existingRendimiento?.vignettes.length ? existingRendimiento.vignettes : [{ id: `new_${Date.now()}`, numeroViñeta: '', tipo: '', pesoNeto: undefined, notas: '' }]);
+    const [notes, setNotes] = useState(existingRendimiento?.notes || '');
+    const [isFinalizado, setIsFinalizado] = useState(existingRendimiento?.isFinalizado || false);
     
     const [vignetteErrors, setVignetteErrors] = useState<Record<string, string>>({});
     const [existingVignetteNumbers, setExistingVignetteNumbers] = useState<Set<string>>(new Set());
@@ -94,7 +105,7 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
             if (v.tipo) {
                 summaryByType[v.tipo] = (summaryByType[v.tipo] || 0) + peso;
             }
-            if (v.tipo === 'Primeras') {
+            if (v.tipo?.toLowerCase().includes('primeras')) {
                 totalRealPrimeras += peso;
             } else {
                 totalRealCatadura += peso;
@@ -162,6 +173,12 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
     };
 
     const removeVignetteRow = (id: string) => {
+        const vignetteToRemove = vignettes.find(v => v.id === id);
+        if (vignetteToRemove?.status && vignetteToRemove.status !== 'En Bodega') {
+            addToast("No se puede eliminar esta viñeta porque ya está en uso en otro proceso.", "error");
+            return;
+        }
+
         setVignettes(prev => prev.length > 1 ? prev.filter(v => v.id !== id) : prev);
         setVignetteErrors(prev => {
             const newErrors = {...prev};
@@ -227,6 +244,8 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
                 totalProyectadoCatadura: projectedData.totalCatadura,
                 totalRealPrimeras: realData.totalRealPrimeras,
                 totalRealCatadura: realData.totalRealCatadura,
+                notes,
+                isFinalizado
             };
 
             let savedRendimiento: Rendimiento;
@@ -238,8 +257,8 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
             
             const selectedOrdersForPrint = availableOrders.filter(o => selectedOrderIds.has(o.id));
             printComponent(
-                <RendimientoPDF rendimiento={savedRendimiento} threshingOrders={selectedOrdersForPrint} />,
-                `Rendimiento-${savedRendimiento.id}`
+                <RendimientoPDF rendimiento={savedRendimiento} threshingOrders={selectedOrdersForPrint} contracts={allContracts} contractLots={allLots} />,
+                `Rendimiento-${savedRendimiento.rendimientoNumber}`
             );
 
             onSaveSuccess();
@@ -251,7 +270,7 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
             setIsSaving(false);
         }
     };
-
+    
     const canSave = Object.keys(vignetteErrors).length === 0 && selectedOrderIds.size > 0 && !isSaving;
 
     if (loading) return <div>Cargando...</div>;
@@ -267,7 +286,7 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
                     {availableOrders.map(o => {
                         const isSelected = selectedOrderIds.has(o.id);
                         const contract = allContracts.find(c => c.id === o.contractId);
-                        const lotNumbers = o.lotIds.map(id => allLots.find(l => l.id === id)?.partida || id).join(', ');
+                        const lotNumbers = allLots.filter(l => o.lotIds.includes(l.id)).map(l => l.partida).join(', ');
                         return (
                             <button key={o.id} type="button" onClick={() => handleOrderToggle(o.id)}
                                 className={`flex items-center gap-3 p-3 rounded-lg border-2 w-full text-left transition-colors ${isSelected ? 'bg-blue-500/10 border-blue-500' : 'bg-muted/50 border-border hover:border-gray-400'}`}>
@@ -304,73 +323,96 @@ const RendimientoForm: React.FC<RendimientoFormProps> = ({ existingRendimiento, 
                         </tr>
                     </thead>
                     <tbody>
-                        {vignettes.map(v => (
-                            <tr key={v.id}>
-                                <td className="p-1 align-top">
-                                    <input type="text" value={v.numeroViñeta} onChange={e => handleVignetteChange(v.id!, 'numeroViñeta', e.target.value)} 
-                                    className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('viñeta') ? 'border-red-500' : 'border-input'}`} />
-                                    {vignetteErrors[v.id!]?.includes('viñeta') && <p className="text-xs text-red-500 mt-1">{vignetteErrors[v.id!]}</p>}
-                                </td>
-                                <td className="p-1 align-top">
-                                    <select value={v.tipo} onChange={e => handleVignetteChange(v.id!, 'tipo', e.target.value)} 
-                                    className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('tipo') ? 'border-red-500' : 'border-input'}`}>
-                                        <option value="">Seleccionar...</option>
-                                        {byproductTypes.map(t => <option key={t.id} value={t.tipo}>{t.tipo}</option>)}
-                                    </select>
-                                </td>
-                                <td className="p-1 align-top">
-                                    <input type="number" value={v.pesoNeto === undefined ? '' : v.pesoNeto} onChange={e => handleVignetteChange(v.id!, 'pesoNeto', e.target.value)} 
-                                    className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('peso') ? 'border-red-500' : 'border-input'}`} />
-                                </td>
-                                <td className="p-1 align-top"><input type="text" value={v.notas} onChange={e => handleVignetteChange(v.id!, 'notas', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input" /></td>
-                                <td className="p-1 align-top"><button onClick={() => removeVignetteRow(v.id!)} className="text-red-500 hover:text-red-700 mt-2"><TrashIcon className="w-4 h-4"/></button></td>
-                            </tr>
-                        ))}
+                        {vignettes.map(v => {
+                            const isUsed = v.status && v.status !== 'En Bodega';
+                            return (
+                                <tr key={v.id}>
+                                    <td className="p-1 align-top">
+                                        <input type="text" value={v.numeroViñeta} onChange={e => handleVignetteChange(v.id!, 'numeroViñeta', e.target.value)} 
+                                        className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('viñeta') ? 'border-red-500' : 'border-input'}`} />
+                                        {vignetteErrors[v.id!]?.includes('viñeta') && <p className="text-xs text-red-500 mt-1">{vignetteErrors[v.id!]}</p>}
+                                    </td>
+                                    <td className="p-1 align-top">
+                                        <select value={v.tipo} onChange={e => handleVignetteChange(v.id!, 'tipo', e.target.value)} 
+                                        className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('tipo') ? 'border-red-500' : 'border-input'}`}>
+                                            <option value="">Seleccionar...</option>
+                                            {byproductTypes.map(t => <option key={t.id} value={t.tipo}>{t.tipo}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="p-1 align-top">
+                                        <input type="number" value={v.pesoNeto === undefined ? '' : v.pesoNeto} onChange={e => handleVignetteChange(v.id!, 'pesoNeto', e.target.value)} 
+                                        className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('peso') ? 'border-red-500' : 'border-input'}`} />
+                                    </td>
+                                    <td className="p-1 align-top"><input type="text" value={v.notas} onChange={e => handleVignetteChange(v.id!, 'notas', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input" /></td>
+                                    <td className="p-1 align-top">
+                                        <button 
+                                            type="button"
+                                            onClick={() => removeVignetteRow(v.id!)}
+                                            className={`mt-2 ${isUsed ? 'text-gray-400 cursor-not-allowed' : 'text-red-500 hover:text-red-700'}`}
+                                            disabled={isUsed}
+                                            title={isUsed ? 'No se puede eliminar: viñeta en uso' : 'Eliminar Viñeta'}
+                                        >
+                                            <TrashIcon className="w-4 h-4"/>
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
                 <button onClick={addVignetteRow} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md"><PlusIcon className="w-4 h-4" /> Agregar Viñeta</button>
             </div>
 
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-teal-600 mb-4">3. Resumen y Comparación</h3>
+                <h3 className="text-lg font-semibold text-teal-600 mb-4">3. Resumen y Finalización</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-muted/50 rounded-lg p-4">
-                        <h4 className="font-semibold mb-2 text-foreground">Totales por Tipo de Subproducto</h4>
-                        {Object.entries(realData.summaryByType).length > 0 ? Object.entries(realData.summaryByType).map(([tipo, total]) => (
-                            <p key={tipo} className="flex justify-between"><span>{tipo}:</span> <strong>{total.toFixed(2)} qqs.</strong></p>
-                        )) : <p className="text-sm text-muted-foreground">Sin viñetas ingresadas.</p>}
-                    </div>
-                     <div className="bg-muted/50 rounded-lg p-4">
                         <h4 className="font-semibold mb-2 text-foreground">Comparación Final</h4>
                         <table className="w-full text-sm">
                             <thead><tr className="font-bold"><td className="p-2">Concepto</td><td className="p-2 text-right">Proyectado</td><td className="p-2 text-right">Real</td><td className="p-2 text-right">Diferencia</td></tr></thead>
                             <tbody>
                                 <tr className="border-b">
                                     <td className="p-2 font-semibold">Primeras</td>
-                                    <td className="p-2 text-right">{projectedData.totalPrimeras.toFixed(2)}</td>
-                                    <td className="p-2 text-right">{realData.totalRealPrimeras.toFixed(2)}</td>
-                                    <td className={`p-2 text-right font-bold ${realData.totalRealPrimeras - projectedData.totalPrimeras < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
-                                        {/* FIX: Cast to Number to ensure toFixed method is available. */}
+                                    <td className="p-2 text-right text-xl font-bold">{projectedData.totalPrimeras.toFixed(2)}</td>
+                                    <td className="p-2 text-right text-xl font-bold">{realData.totalRealPrimeras.toFixed(2)}</td>
+                                    <td className={`p-2 text-right text-xl font-bold ${realData.totalRealPrimeras - projectedData.totalPrimeras < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
                                         {(Number(realData.totalRealPrimeras) - Number(projectedData.totalPrimeras)).toFixed(2)}
                                     </td>
                                 </tr>
                                 <tr className="border-b">
                                     <td className="p-2 font-semibold">Catadura</td>
-                                    <td className="p-2 text-right">{projectedData.totalCatadura.toFixed(2)}</td>
-                                    <td className="p-2 text-right">{realData.totalRealCatadura.toFixed(2)}</td>
-                                     <td className={`p-2 text-right font-bold ${realData.totalRealCatadura - projectedData.totalCatadura < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
-                                        {/* FIX: Cast to Number to ensure toFixed method is available. */}
+                                    <td className="p-2 text-right text-xl font-bold">{projectedData.totalCatadura.toFixed(2)}</td>
+                                    <td className="p-2 text-right text-xl font-bold">{realData.totalRealCatadura.toFixed(2)}</td>
+                                     <td className={`p-2 text-right text-xl font-bold ${realData.totalRealCatadura - projectedData.totalCatadura < -0.005 ? 'text-red-500' : 'text-green-600'}`}>
                                         {(Number(realData.totalRealCatadura) - Number(projectedData.totalCatadura)).toFixed(2)}
                                      </td>
                                 </tr>
                                 <tr className="font-bold bg-muted">
                                     <td className="p-2">Total</td>
-                                    <td className="p-2 text-right">{(projectedData.totalPrimeras + projectedData.totalCatadura).toFixed(2)}</td>
-                                    <td className="p-2 text-right">{realData.totalReal.toFixed(2)}</td>
-                                    <td className="p-2 text-right">{((realData.totalRealPrimeras + realData.totalRealCatadura) - (projectedData.totalPrimeras + projectedData.totalCatadura)).toFixed(2)}</td>
+                                    <td className="p-2 text-right text-xl">{(projectedData.totalPrimeras + projectedData.totalCatadura).toFixed(2)}</td>
+                                    <td className="p-2 text-right text-xl">{realData.totalReal.toFixed(2)}</td>
+                                    <td className="p-2 text-right text-xl">{((realData.totalRealPrimeras + realData.totalRealCatadura) - (projectedData.totalPrimeras + projectedData.totalCatadura)).toFixed(2)}</td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                     <div className="space-y-4">
+                         <div>
+                             <label htmlFor="notes" className="block text-sm font-medium text-muted-foreground mb-1">Notas Adicionales</label>
+                             <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full p-2 border rounded-md bg-background border-input" placeholder="Anotaciones sobre el rendimiento, calidad, etc." />
+                         </div>
+                         <div className="flex items-center justify-between p-3 rounded-lg border">
+                            <div>
+                                 <p className="font-medium text-foreground">Marcar como Finalizado</p>
+                                 <p className="text-xs text-muted-foreground">Bloquea la edición para usuarios no-administradores.</p>
+                             </div>
+                             <ToggleSwitch
+                                 id="isFinalizado"
+                                 checked={isFinalizado}
+                                 onChange={setIsFinalizado}
+                                 disabled={!roleDetails?.permissions.rendimientos?.canFinalize}
+                             />
+                         </div>
                     </div>
                 </div>
             </div>

@@ -1,9 +1,7 @@
 
 
-
-
 import React, { useState, useEffect } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { AppUser, AppRole, PagePermissions, AppUserRole } from '../types';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
@@ -12,15 +10,20 @@ import { useAuth } from '../contexts/AuthContext';
 import CoffeeTypesPage from '../components/CoffeeTypesPage';
 import ByproductTypesPage from '../components/ByproductTypesPage';
 import LogsTab from '../components/LogsTab';
+import { useToast } from '../hooks/useToast';
+import NotificationsTab from '../components/NotificationsTab';
 
-type AdminTab = 'users' | 'roles' | 'coffeeTypes' | 'byproducts' | 'logs';
+type AdminTab = 'users' | 'roles' | 'coffeeTypes' | 'byproducts' | 'logs' | 'notifications';
 
 const manageablePages = [
     { id: 'dashboard', name: 'Dashboard' },
-    { id: 'contracts', name: 'Exportaciones (Contratos)' },
+    { id: 'contracts-info', name: 'Exportaciones (Info. Contrato)' },
+    { id: 'contracts-lots', name: 'Exportaciones (Partidas)' },
+    { id: 'contracts-threshing', name: 'Exportaciones (Órdenes de Trilla)' },
     { id: 'ventasLocales', name: 'Ventas Locales' },
     { id: 'ingreso', name: 'Ingreso de Café' },
     { id: 'rendimientos', name: 'Rendimientos' },
+    { id: 'reprocesos', name: 'Reprocesos' },
     { id: 'mezclas', name: 'Mezclas' },
     { id: 'salidas', name: 'Salidas' },
     { id: 'trazabilidad', name: 'Trazabilidad' },
@@ -31,7 +34,7 @@ const manageablePages = [
     { id: 'logs', name: 'Bitácora de Actividad' },
 ];
 
-const defaultPermissions: PagePermissions = { view: false, add: false, edit: false, delete: false, viewCosts: false, viewAnalysis: false };
+const defaultPermissions: PagePermissions = { view: false, add: false, edit: false, delete: false, viewCosts: false, viewAnalysis: false, viewPrices: false, editEntrada: false, editSalida: false, canFinalize: false };
 
 const getDefaultRolePermissions = (): { [key: string]: PagePermissions } => {
     return manageablePages.reduce((acc, page) => {
@@ -87,18 +90,49 @@ const RolePermissionsEditor: React.FC<{ permissions: { [key: string]: PagePermis
                                     <input type="checkbox" checked={allChecked} onChange={e => handleSelectAll(page.id, e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                    {page.id === 'ingreso' && (
-                                        <div className="flex items-center justify-center gap-4">
+                                    <div className="flex items-center justify-center gap-4 flex-wrap">
+                                        {page.id === 'ingreso' && (
+                                            <>
+                                                <label className="flex items-center gap-2 text-sm text-foreground">
+                                                    <input type="checkbox" checked={!!pagePerms.viewCosts} onChange={e => handlePermissionChange(page.id, 'viewCosts', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
+                                                    Ver Costos
+                                                </label>
+                                                <label className="flex items-center gap-2 text-sm text-foreground">
+                                                    <input type="checkbox" checked={!!pagePerms.viewAnalysis} onChange={e => handlePermissionChange(page.id, 'viewAnalysis', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
+                                                    Ver Análisis y Catación
+                                                </label>
+                                            </>
+                                        )}
+                                        {page.id === 'contracts-lots' && (
                                             <label className="flex items-center gap-2 text-sm text-foreground">
-                                                <input type="checkbox" checked={!!pagePerms.viewCosts} onChange={e => handlePermissionChange(page.id, 'viewCosts', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
-                                                Ver Costos
+                                                <input type="checkbox" checked={!!pagePerms.viewPrices} onChange={e => handlePermissionChange(page.id, 'viewPrices', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
+                                                Ver Precios
                                             </label>
+                                        )}
+                                        {page.id === 'reprocesos' && (
+                                            <>
+                                                <label className="flex items-center gap-2 text-sm text-foreground">
+                                                    <input type="checkbox" checked={!!pagePerms.editEntrada} onChange={e => handlePermissionChange(page.id, 'editEntrada', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
+                                                    Editar Entrada
+                                                </label>
+                                                <label className="flex items-center gap-2 text-sm text-foreground">
+                                                    <input type="checkbox" checked={!!pagePerms.editSalida} onChange={e => handlePermissionChange(page.id, 'editSalida', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
+                                                    Editar Salida
+                                                </label>
+                                            </>
+                                        )}
+                                        {['contracts-info', 'ventasLocales', 'rendimientos', 'reprocesos'].includes(page.id) && (
                                             <label className="flex items-center gap-2 text-sm text-foreground">
-                                                <input type="checkbox" checked={!!pagePerms.viewAnalysis} onChange={e => handlePermissionChange(page.id, 'viewAnalysis', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"/>
-                                                Ver Análisis
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!pagePerms.canFinalize}
+                                                    onChange={e => handlePermissionChange(page.id, 'canFinalize', e.target.checked)}
+                                                    className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                                />
+                                                Marcar/Editar Finalizado
                                             </label>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         );
@@ -109,17 +143,19 @@ const RolePermissionsEditor: React.FC<{ permissions: { [key: string]: PagePermis
     );
 };
 
-const AddUserModal: React.FC<{ roles: AppRole[]; onSave: (newUser: { email: string; role: string }) => void; onCancel: () => void; }> = ({ roles, onSave, onCancel }) => {
+const AddUserModal: React.FC<{ roles: AppRole[]; onSave: (newUser: { name: string; email: string; role: string }) => void; onCancel: () => void; }> = ({ roles, onSave, onCancel }) => {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [role, setRole] = useState(roles.find(r => !r.isDefault)?.name || '');
+    const { addToast } = useToast();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!email || !role) {
-            alert("Email y rol son requeridos.");
+        if (!name || !email || !role) {
+            addToast("Nombre, email y rol son requeridos.", "error");
             return;
         }
-        onSave({ email, role });
+        onSave({ name, email, role });
     };
 
     return (
@@ -127,6 +163,10 @@ const AddUserModal: React.FC<{ roles: AppRole[]; onSave: (newUser: { email: stri
             <div className="bg-card p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
                 <h3 className="text-lg font-bold text-foreground mb-4">Invitar Nuevo Usuario</h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                     <div>
+                        <label htmlFor="name" className="block text-sm font-medium text-muted-foreground mb-1">Nombre</label>
+                        <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                    </div>
                     <div>
                         <label htmlFor="email" className="block text-sm font-medium text-muted-foreground mb-1">Correo Electrónico</label>
                         <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
@@ -148,11 +188,12 @@ const AddUserModal: React.FC<{ roles: AppRole[]; onSave: (newUser: { email: stri
 };
 
 const EditUserModal: React.FC<{ user: AppUser; roles: AppRole[]; onSave: (user: AppUser) => void; onCancel: () => void; }> = ({ user, roles, onSave, onCancel }) => {
+    const [name, setName] = useState(user.name || '');
     const [selectedRole, setSelectedRole] = useState(user.role);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({ ...user, role: selectedRole });
+        onSave({ ...user, name, role: selectedRole });
     };
 
     return (
@@ -161,8 +202,11 @@ const EditUserModal: React.FC<{ user: AppUser; roles: AppRole[]; onSave: (user: 
                 <h3 className="text-lg font-bold text-foreground mb-4">Editar Usuario: {user.email}</h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
                      <div>
+                        <label htmlFor="editName" className="block text-sm font-medium text-muted-foreground mb-1">Nombre</label>
+                        <input id="editName" type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm" />
+                    </div>
+                     <div>
                         <label htmlFor="role" className="block text-sm font-medium text-muted-foreground mb-1">Rol</label>
-                        {/* FIX: Cast `e.target.value` to the correct type to resolve the TypeScript error. */}
                         <select id="role" value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as AppUserRole)} required className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-ring focus:border-ring sm:text-sm">
                             {roles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
                         </select>
@@ -180,11 +224,12 @@ const EditUserModal: React.FC<{ user: AppUser; roles: AppRole[]; onSave: (user: 
 const AddRoleModal: React.FC<{ onSave: (newRole: { name: string, permissions: { [key: string]: PagePermissions } }) => void; onCancel: () => void; }> = ({ onSave, onCancel }) => {
     const [name, setName] = useState('');
     const [permissions, setPermissions] = useState(getDefaultRolePermissions());
+    const { addToast } = useToast();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) {
-            alert("El nombre del rol es requerido.");
+            addToast("El nombre del rol es requerido.", "error");
             return;
         }
         onSave({ name: name.trim(), permissions });
@@ -214,11 +259,12 @@ const AddRoleModal: React.FC<{ onSave: (newRole: { name: string, permissions: { 
 const EditRoleModal: React.FC<{ role: AppRole; onSave: (role: AppRole) => void; onCancel: () => void; }> = ({ role, onSave, onCancel }) => {
     const [name, setName] = useState(role.name);
     const [permissions, setPermissions] = useState(role.permissions || getDefaultRolePermissions());
+    const { addToast } = useToast();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) {
-            alert("El nombre del rol es requerido.");
+            addToast("El nombre del rol es requerido.", "error");
             return;
         }
         onSave({ ...role, name: name.trim(), permissions });
@@ -270,9 +316,10 @@ const AdminPage: React.FC = () => {
                 <h2 className="text-2xl font-bold text-foreground">Administración del Sistema</h2>
             </div>
             <div className="border-b border-border px-6">
-                <nav className="flex space-x-4 -mb-px">
+                <nav className="flex space-x-4 -mb-px overflow-x-auto">
                     <TabButton tab="users" label="Gestionar Usuarios" />
                     <TabButton tab="roles" label="Gestionar Roles" />
+                    <TabButton tab="notifications" label="Notificaciones" />
                     <TabButton tab="coffeeTypes" label="Tipos de Café" />
                     <TabButton tab="byproducts" label="Tipos de Sub Productos" />
                     <TabButton tab="logs" label="Bitácora de Actividad" />
@@ -281,6 +328,7 @@ const AdminPage: React.FC = () => {
             <div className="p-6">
                 {activeTab === 'users' && <UserManagement />}
                 {activeTab === 'roles' && <RoleManagement />}
+                {activeTab === 'notifications' && <NotificationsTab />}
                 {activeTab === 'coffeeTypes' && <CoffeeTypesPage />}
                 {activeTab === 'byproducts' && <ByproductTypesPage />}
                 {activeTab === 'logs' && <LogsTab />}
@@ -300,6 +348,7 @@ const UserManagement: React.FC = () => {
     const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
     const [userToEdit, setUserToEdit] = useState<AppUser | null>(null);
     const [isAddingUser, setIsAddingUser] = useState(false);
+    const { addToast } = useToast();
 
     const fetchUsersAndRoles = async () => {
         setLoading(true);
@@ -312,6 +361,7 @@ const UserManagement: React.FC = () => {
             setRoles(rolesData);
         } catch (error) {
             console.error("Error fetching users and roles: ", error);
+            addToast("Error al cargar usuarios y roles.", "error");
         }
         setLoading(false);
     };
@@ -324,16 +374,18 @@ const UserManagement: React.FC = () => {
                 fetchUsersAndRoles();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
     
     const handleDeleteUser = async () => {
         if (!userToDelete) return;
         try {
             await api.deleteDocument('users', userToDelete.id!);
+            addToast("Usuario eliminado con éxito.", "success");
         } catch (error) {
             console.error("Error deleting user:", error);
+            addToast("Error al eliminar el usuario.", "error");
         } finally {
             setUserToDelete(null);
         }
@@ -342,19 +394,23 @@ const UserManagement: React.FC = () => {
     const handleUpdateUser = async (updatedUser: AppUser) => {
         if (!userToEdit) return;
         try {
-            await api.updateDocument<AppUser>('users', userToEdit.id!, { role: updatedUser.role });
+            await api.updateDocument<AppUser>('users', userToEdit.id!, { name: updatedUser.name, role: updatedUser.role });
+            addToast("Usuario actualizado con éxito.", "success");
         } catch (error) {
             console.error("Error updating user:", error);
+            addToast("Error al actualizar el usuario.", "error");
         } finally {
             setUserToEdit(null);
         }
     };
 
-    const handleInviteUser = async (newUser: { email: string; role: string }) => {
+    const handleInviteUser = async (newUser: { name: string; email: string; role: string }) => {
         try {
-            await api.addDocument<AppUser>('users', { email: newUser.email, role: newUser.role as AppUserRole });
+            await api.addDocument<AppUser>('users', { name: newUser.name, email: newUser.email, role: newUser.role as AppUserRole });
+            addToast("Usuario invitado con éxito.", "success");
         } catch (error) {
             console.error("Error inviting user:", error);
+            addToast("Error al invitar al usuario.", "error");
         } finally {
             setIsAddingUser(false);
         }
@@ -373,6 +429,7 @@ const UserManagement: React.FC = () => {
                 <table className="w-full text-sm text-left text-muted-foreground">
                     <thead className="text-xs uppercase">
                         <tr>
+                            <th scope="col" className="px-6 py-3">Nombre</th>
                             <th scope="col" className="px-6 py-3">Correo Electrónico</th>
                             <th scope="col" className="px-6 py-3">Rol</th>
                             <th scope="col" className="px-6 py-3">Acciones</th>
@@ -380,11 +437,12 @@ const UserManagement: React.FC = () => {
                     </thead>
                     <tbody>
                         {loading ? (
-                             <tr><td colSpan={3} className="text-center py-10">Cargando usuarios...</td></tr>
+                             <tr><td colSpan={4} className="text-center py-10">Cargando usuarios...</td></tr>
                         ) : users.map((user) => (
                             <tr key={user.id} className="border-b border-border bg-card hover:bg-muted/50">
+                                <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{user.name || 'N/A'}</td>
                                 <td className="px-6 py-4 font-medium text-foreground">{user.email}</td>
-                                <td className="px-6 py-4">{user.role}</td>
+                                <td className="px-6 py-4 text-blue-600 dark:text-blue-400">{user.role}</td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-4">
                                         {permissions?.edit && <button 
@@ -442,6 +500,7 @@ const RoleManagement: React.FC = () => {
     const [roleToDelete, setRoleToDelete] = useState<AppRole | null>(null);
     const [roleToEdit, setRoleToEdit] = useState<AppRole | null>(null);
     const [isAddingRole, setIsAddingRole] = useState(false);
+    const { addToast } = useToast();
 
     const fetchRoles = async () => {
         setLoading(true);
@@ -454,6 +513,7 @@ const RoleManagement: React.FC = () => {
             setRoles(rolesWithPermissions);
         } catch (error) {
             console.error("Error fetching roles: ", error);
+            addToast("Error al cargar roles.", "error");
         }
         setLoading(false);
     };
@@ -466,16 +526,18 @@ const RoleManagement: React.FC = () => {
                 fetchRoles();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleDeleteRole = async () => {
         if (!roleToDelete) return;
         try {
             await api.deleteDocument('roles', roleToDelete.id!);
+            addToast("Rol eliminado con éxito.", "success");
         } catch (error) {
             console.error("Error deleting role:", error);
+            addToast("Error al eliminar el rol.", "error");
         } finally {
             setRoleToDelete(null);
         }
@@ -488,8 +550,10 @@ const RoleManagement: React.FC = () => {
                 name: updatedRole.name,
                 permissions: updatedRole.permissions
             });
+            addToast("Rol actualizado con éxito.", "success");
         } catch (error) {
             console.error("Error updating role:", error);
+            addToast("Error al actualizar el rol.", "error");
         } finally {
             setRoleToEdit(null);
         }
@@ -498,8 +562,10 @@ const RoleManagement: React.FC = () => {
     const handleAddRole = async (newRole: { name: string, permissions: { [key: string]: PagePermissions } }) => {
         try {
             await api.addDocument<AppRole>('roles', { ...newRole, isDefault: false });
+            addToast("Rol creado con éxito.", "success");
         } catch (error) {
             console.error("Error adding role:", error);
+            addToast("Error al crear el rol.", "error");
         } finally {
             setIsAddingRole(false);
         }
@@ -526,7 +592,7 @@ const RoleManagement: React.FC = () => {
                         <tr><td colSpan={2} className="text-center py-10">Cargando roles...</td></tr>
                      ) : roles.map((role) => (
                         <tr key={role.id} className="border-b border-border bg-card hover:bg-muted/50">
-                            <td className="px-6 py-4 font-medium text-foreground">
+                            <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">
                                 {role.name} {role.isDefault && <span className="text-xs text-muted-foreground">(Default)</span>}
                             </td>
                             <td className="px-6 py-4">

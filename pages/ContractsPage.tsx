@@ -1,5 +1,7 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Contract, ContractLot, Exporter, ThreshingOrder, PurchaseReceipt, ThreshingOrderReceipt, PagePermissions, Viñeta, Mezcla, Rendimiento, Reproceso } from '../types';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
@@ -17,7 +19,9 @@ import { useAuth } from '../contexts/AuthContext';
 import EditThreshingOrderForm from '../components/EditThreshingOrderForm';
 import ToggleSwitch from '../components/ToggleSwitch';
 import { getCurrentHarvestYear, getHarvestYears } from '../utils/harvestYear';
-
+import { useToast } from '../hooks/useToast';
+import { useHighlight } from '../contexts/HighlightContext';
+import { Page } from './DashboardLayout';
 
 const formatDate = (dateString: string) => {
     if (!dateString || !dateString.includes('-')) return '';
@@ -25,7 +29,7 @@ const formatDate = (dateString: string) => {
     return `${day}/${month}/${year}`;
 };
 
-const LotDetailModal: React.FC<{ lot: ContractLot; onClose: () => void }> = ({ lot, onClose }) => {
+const LotDetailModal: React.FC<{ lot: ContractLot; onClose: () => void; canViewPrices: boolean; }> = ({ lot, onClose, canViewPrices }) => {
     return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose}>
         <div className="bg-card p-6 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -42,12 +46,14 @@ const LotDetailModal: React.FC<{ lot: ContractLot; onClose: () => void }> = ({ l
                     <div><p className="text-muted-foreground">Peso qqs.</p><p className="font-medium text-foreground">{lot.pesoQqs.toFixed(2)}</p></div>
                 </div>
                  {/* Pricing */}
-                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
-                    <div><p className="text-muted-foreground">Fijación ($)</p><p className="font-medium text-foreground">${lot.fijacion.toFixed(2)}</p></div>
-                    <div><p className="text-muted-foreground">Fecha Fijación</p><p className="font-medium text-foreground">{formatDate(lot.fechaFijacion)}</p></div>
-                    <div><p className="text-muted-foreground">Precio Final</p><p className="font-medium text-foreground">${lot.precioFinal.toFixed(2)}</p></div>
-                    <div><p className="text-muted-foreground">Valor Cobro</p><p className="font-bold text-lg text-green-600">${lot.valorCobro.toFixed(2)}</p></div>
-                </div>
+                 {canViewPrices && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                        <div><p className="text-muted-foreground">Fijación ($)</p><p className="font-medium text-foreground">${lot.fijacion.toFixed(2)}</p></div>
+                        <div><p className="text-muted-foreground">Fecha Fijación</p><p className="font-medium text-foreground">{formatDate(lot.fechaFijacion)}</p></div>
+                        <div><p className="text-muted-foreground">Precio Final</p><p className="font-medium text-foreground">${lot.precioFinal.toFixed(2)}</p></div>
+                        <div><p className="text-muted-foreground">Valor Cobro</p><p className="font-bold text-lg text-green-600">${lot.valorCobro.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
+                    </div>
+                 )}
                 {/* Sample */}
                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t">
                     <div><p className="text-muted-foreground">Guía Muestra</p><p className="font-medium text-foreground">{lot.guiaMuestra || 'N/A'}</p></div>
@@ -79,85 +85,7 @@ const AlertIcon: React.FC<{ type: 'triangle' | 'dot', color: string, isPulsing?:
     return <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0`} style={{ backgroundColor: color }}></div>;
 };
 
-const AlertsBar: React.FC<{ lots: ContractLot[], threshingOrders: ThreshingOrder[], contract: Contract }> = ({ lots, threshingOrders, contract }) => {
-    const alerts = useMemo(() => {
-        if (!lots || contract.isServiceContract) return [];
-        const activeAlerts: { text: string, icon: React.ReactNode, colorClass: string, pulse: boolean }[] = [];
-        
-        const contractQqs = lots.reduce((sum, l) => sum + l.pesoQqs, 0);
-
-        // Threshing Alert
-        const totalProducedPrimeras = threshingOrders.reduce((sum, order) => sum + order.totalPrimeras, 0);
-        const missingQqsForCompletion = contractQqs - totalProducedPrimeras;
-        if (missingQqsForCompletion > 0.01) {
-            activeAlerts.push({
-                text: `Faltan ${missingQqsForCompletion.toFixed(2)} qqs. para completar el contrato`,
-                icon: <AlertIcon type="triangle" color="orange" />,
-                colorClass: 'border-orange-500 text-orange-600 dark:text-orange-400',
-                pulse: false,
-            });
-        }
-        
-        // Fixation Alert
-        const pendingFixationLots = lots.filter(l => !l.fijacion || l.fijacion === 0);
-        if (pendingFixationLots.length > 0) {
-            const lotNumbers = pendingFixationLots.map(l => l.partida.split('/').pop()).join(', ');
-            const plural = pendingFixationLots.length > 1 ? 's' : '';
-            activeAlerts.push({
-                text: `Partida${plural} ${lotNumbers} sin fijación`,
-                icon: <AlertIcon type="triangle" color="red" isPulsing />,
-                colorClass: 'border-red-500 text-red-600 dark:text-red-400',
-                pulse: true,
-            });
-        }
-
-        // Sample Approval Alert
-        const pendingSampleLots = lots.filter(l => !l.muestraAprobada);
-        if (pendingSampleLots.length > 0) {
-            const lotNumbers = pendingSampleLots.map(l => l.partida.split('/').pop()).join(', ');
-            const plural = pendingSampleLots.length > 1 ? 's' : '';
-            activeAlerts.push({
-                text: `Partida${plural} ${lotNumbers} sin muestra aprobada`,
-                icon: <AlertIcon type="triangle" color="orange" />, 
-                colorClass: 'border-orange-500 text-orange-600 dark:text-orange-400',
-                pulse: false,
-            });
-        }
-
-        // ISF Alert
-        const missingIsfSentLots = lots.filter(l => l.isf && !l.isfSent);
-        if (missingIsfSentLots.length > 0) {
-            const lotNumbers = missingIsfSentLots.map(l => l.partida.split('/').pop()).join(', ');
-            const plural = missingIsfSentLots.length > 1 ? 's' : '';
-             activeAlerts.push({
-                text: `Partida${plural} ${lotNumbers} con ISF pendiente de envío`,
-                icon: <AlertIcon type="dot" color="blue" />,
-                colorClass: 'border-blue-500 text-blue-600 dark:text-blue-400',
-                pulse: false,
-            });
-        }
-        
-        return activeAlerts;
-    }, [lots, threshingOrders, contract]);
-
-    if (alerts.length === 0) return null;
-
-    return (
-        <div className="bg-card border border-border rounded-lg shadow-sm p-4">
-            <h3 className="text-md font-semibold text-foreground mb-3">Alertas y Avisos</h3>
-            <div className="flex flex-wrap gap-3">
-                {alerts.map((alert, index) => (
-                    <div key={index} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-full bg-muted/50 border ${alert.colorClass}`}>
-                        {alert.icon}
-                        <span>{alert.text}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; contractQqs: number; permissions: PagePermissions | undefined; }> = ({ contract, onBack, contractQqs, permissions }) => {
+const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; contractQqs: number; permissions: { info: PagePermissions; lots: PagePermissions; threshing: PagePermissions; }; }> = ({ contract, onBack, contractQqs, permissions }) => {
     const [lots, setLots] = useState<ContractLot[]>([]);
     const [threshingOrders, setThreshingOrders] = useState<ThreshingOrder[]>([]);
     const [allThreshingOrders, setAllThreshingOrders] = useState<ThreshingOrder[]>([]);
@@ -171,6 +99,9 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
 
     const [orderToView, setOrderToView] = useState<ThreshingOrder | null>(null);
     const [orderToDelete, setOrderToDelete] = useState<ThreshingOrder | null>(null);
+    const { addToast } = useToast();
+    const { targetId, clearHighlight } = useHighlight();
+
     
     const fetchDetails = async () => {
         setLoading(true);
@@ -202,10 +133,24 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
             }
         };
 
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, [contract.id, contract.exporterId]);
     
+    useEffect(() => {
+        if (targetId && lots.length > 0) {
+            const element = document.querySelector(`[data-lot-id="${targetId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-row');
+                setTimeout(() => {
+                    element.classList.remove('highlight-row');
+                }, 4500);
+            }
+        }
+    }, [targetId, lots, loading]);
+
+
     const confirmDeleteLot = async () => {
         if (!lotToDelete) return;
         try {
@@ -230,11 +175,19 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
     const confirmDeleteOrder = async () => {
         if (!orderToDelete) return;
         try {
+            const allRendimientos = await api.getCollection<Rendimiento>('rendimientos');
+            const isUsedInRendimiento = allRendimientos.some(r => r.threshingOrderIds.includes(orderToDelete.id!));
+            if (isUsedInRendimiento) {
+                addToast(`No se puede anular la orden '${orderToDelete.orderNumber}' porque ya ha sido liquidada en un reporte de rendimiento. Primero debe eliminar el rendimiento asociado.`, 'error');
+                setOrderToDelete(null);
+                return;
+            }
+
             const orderReceiptsToDelete = await api.getCollection<ThreshingOrderReceipt>('threshingOrderReceipts', or => or.threshingOrderId === orderToDelete.id);
             
             const allReceipts = await api.getCollection<PurchaseReceipt>('purchaseReceipts');
             const allMezclas = await api.getCollection<Mezcla>('mezclas');
-            const allRendimientos = await api.getCollection<Rendimiento>('rendimientos');
+            const allRendimientosInv = await api.getCollection<Rendimiento>('rendimientos');
             const allReprocesos = await api.getCollection<Reproceso>('reprocesos');
     
             const inventoryUpdatePromises: Promise<any>[] = [];
@@ -280,7 +233,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
                             return false;
                         };
                         
-                        if (!findAndRevertVignette(allRendimientos, 'vignettes', 'rendimientos')) {
+                        if (!findAndRevertVignette(allRendimientosInv, 'vignettes', 'rendimientos')) {
                             findAndRevertVignette(allReprocesos, 'outputVignettes', 'reprocesos');
                         }
                         break;
@@ -295,6 +248,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
     
         } catch (error) {
             console.error("Error deleting threshing order and reverting inventory:", error);
+            addToast("No se pudo anular la orden de trilla.", "error");
         } finally {
             setOrderToDelete(null);
         }
@@ -309,8 +263,36 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
             );
         } catch (e) {
             console.error("Failed to prepare print data for Threshing Order:", e);
-            alert("No se pudo generar el PDF para imprimir.");
+            addToast("No se pudo generar el PDF para imprimir.", "error");
         }
+    };
+
+    const alerts = useMemo(() => {
+        if (loading) return null;
+        
+        const totalPrimerasProduced = threshingOrders.reduce((sum, order) => sum + order.totalPrimeras, 0);
+        const shortfall = contractQqs - totalPrimerasProduced;
+        
+        const lotsWithoutFixation = lots.filter(l => !l.fijacion || l.fijacion === 0);
+        const lotsNeedingIsf = lots.filter(l => l.isf && !l.isfSent);
+        
+        return {
+            shortfall: shortfall > 0.005 ? shortfall : 0,
+            lotsWithoutFixation,
+            lotsNeedingIsf,
+        };
+    }, [loading, contractQqs, threshingOrders, lots]);
+
+    const openPdf = (pdfData: string) => {
+        const byteCharacters = atob(pdfData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {type: 'application/pdf'});
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
     };
 
     if (view === 'createThreshingOrder') {
@@ -324,6 +306,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
             existingLots={lots} 
             onCancel={() => setView('details')}
             onLotAdded={() => setView('details')}
+            canViewPrices={permissions.lots.viewPrices === true}
         />;
     }
     
@@ -333,9 +316,6 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
 
     return (
         <div className="space-y-8">
-            <button onClick={onBack} className="text-sm font-medium text-green-600 hover:underline">
-                &larr; Volver a Contratos
-            </button>
             <div className="bg-card border border-border rounded-lg shadow-sm p-6 relative">
                 <div className="flex justify-between items-start">
                     <div>
@@ -352,7 +332,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
                     <div><p className="text-muted-foreground">Exportadora</p><p className="font-medium text-foreground">{contract.exporterName}</p></div>
                     <div><p className="text-muted-foreground">Fecha Venta</p><p className="font-medium text-foreground">{formatDate(contract.saleDate)}</p></div>
                     <div><p className="text-muted-foreground">Cantidad Total qqs.</p><p className="font-bold text-lg text-foreground">{contractQqs.toFixed(2)}</p></div>
-                    <div><p className="text-muted-foreground">Diferencial</p><p className="font-medium text-pink-600 dark:text-pink-400">${contract.differential.toFixed(2)}</p></div>
+                    {permissions.lots.viewPrices && <div><p className="text-muted-foreground">Diferencial</p><p className="font-medium text-pink-600 dark:text-pink-400">${contract.differential.toFixed(2)}</p></div>}
                     <div><p className="text-muted-foreground">Unidad Precio</p><p className="font-medium text-foreground">{contract.priceUnit}</p></div>
                     <div><p className="text-muted-foreground">Tipo de Café</p><p className="font-medium text-green-600 dark:text-green-500">{contract.coffeeType || 'N/A'}</p></div>
                     <div><p className="text-muted-foreground">Posición (Mes)</p><p className="font-medium text-foreground">{contract.position || 'N/A'}</p></div>
@@ -372,167 +352,212 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
                 )}
 
                 <div className="mt-6 pt-4 border-t border-border flex gap-4">
-                    <button className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">Ver PDF Contrato</button>
-                    <button className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted">Ver PDF Instrucciones</button>
+                    <button 
+                        onClick={() => contract.contractPdf && openPdf(contract.contractPdf)} 
+                        disabled={!contract.contractPdf} 
+                        className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed">
+                        Ver PDF Contrato
+                    </button>
+                    <button 
+                        onClick={() => contract.instructionsPdf && openPdf(contract.instructionsPdf)} 
+                        disabled={!contract.instructionsPdf}
+                        className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed">
+                        Ver PDF Instrucciones
+                    </button>
                 </div>
             </div>
 
-            <AlertsBar lots={lots} threshingOrders={threshingOrders} contract={contract} />
-
-            <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-foreground">Listado de Partidas</h3>
-                     {permissions?.add && <button onClick={() => setView('createLot')} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
-                        <PlusIcon className="w-4 h-4" /> Agregar Partida
-                    </button>}
-                </div>
-                
-                <div className="overflow-x-auto mt-4">
-                    <table className="w-full text-sm text-left text-muted-foreground whitespace-nowrap">
-                        <thead className="text-xs uppercase bg-muted">
-                             <tr>
-                                <th className="px-4 py-2">Partida</th>
-                                <th className="px-4 py-2">Bultos</th>
-                                <th className="px-4 py-2">Empaque</th>
-                                <th className="px-4 py-2 text-right">Peso Kg</th>
-                                <th className="px-4 py-2 text-right">Diferencial</th>
-                                <th className="px-4 py-2 text-right">Precio Final</th>
-                                <th className="px-4 py-2">Muestra Enviada</th>
-                                <th className="px-4 py-2">Aprobada</th>
-                                <th className="px-4 py-2">ISF Req.</th>
-                                <th className="px-4 py-2">ISF Enviado</th>
-                                <th className="px-4 py-2 text-center">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={11} className="text-center py-10">Cargando partidas...</td></tr>
-                            ) : lots.length > 0 ? (
-                                lots.map(lot => {
-                                    const needsFixation = !lot.fijacion || lot.fijacion === 0;
-                                    const needsIsfSent = lot.isf && !lot.isfSent;
-                                    return (
-                                        <tr key={lot.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedLot(lot)}>
-                                            <td className="px-4 py-3 font-semibold">
-                                                <div className="flex items-center gap-2">
-                                                    {needsFixation && <AlertIcon type="triangle" color="orange" />}
-                                                    {needsIsfSent && <AlertIcon type="dot" color="blue" />}
-                                                    <span className={needsFixation ? 'text-amber-500' : 'text-green-600'}>{lot.partida}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3">{lot.bultos}</td>
-                                            <td className="px-4 py-3">{lot.empaque}</td>
-                                            <td className="px-4 py-3 text-right">{lot.pesoKg.toFixed(2)}</td>
-                                            <td className="px-4 py-3 text-right">${contract.differential.toFixed(2)}</td>
-                                            <td className="px-4 py-3 text-right font-medium text-foreground">${lot.precioFinal.toFixed(2)}</td>
-                                            <td className="px-4 py-3">{lot.guiaMuestra ? 'Sí' : 'No'}</td>
-                                            <td className="px-4 py-3">{lot.muestraAprobada ? 'Sí' : 'No'}</td>
-                                            <td className="px-4 py-3">{lot.isf ? 'Sí' : 'No'}</td>
-                                            <td className="px-4 py-3">{lot.isf ? (lot.isfSent ? 'Sí' : 'No') : 'N/A'}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center justify-center gap-4">
-                                                    {permissions?.edit && <button onClick={(e) => { e.stopPropagation(); setLotToEdit(lot); }} className="text-yellow-500 hover:text-yellow-700"><PencilIcon className="w-4 h-4" /></button>}
-                                                    {permissions?.delete && <button onClick={(e) => { e.stopPropagation(); setLotToDelete(lot); }} className="text-red-500 hover:text-red-700"><TrashIcon className="w-4 h-4" /></button>}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            ) : (
-                                <tr><td colSpan={11} className="text-center py-10">No hay partidas para este contrato.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-foreground">Órdenes de Trilla</h3>
-                     {permissions?.add && <button onClick={() => setView('createThreshingOrder')} disabled={!!contract.isServiceContract} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed">
-                        <FilePlusIcon className="w-4 h-4" /> Crear Orden de Trilla
-                    </button>}
-                </div>
-                <div className="space-y-2 mb-4">
-                    {threshingOrders.map(order => {
-                        const neededPrimeras = order.lotIds.reduce((sum, lotId) => {
-                            const lot = lots.find(l => l.id === lotId);
-                            return sum + (lot?.pesoQqs ?? 0);
-                        }, 0);
-                        const difference = order.totalPrimeras - neededPrimeras;
-
-                        if (difference < -0.005) {
-                            const faltan = Math.abs(difference);
-                            return (
-                                <div key={order.id} className="p-3 text-sm rounded-md border border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300 flex items-center gap-3">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" className="flex-shrink-0" fill="currentColor"><path d="M12 2L2 22h20L12 2z" /></svg>
-                                    <span>Faltan <strong>{faltan.toFixed(2)} qqs.</strong> de primera para completar la orden <strong>{order.orderNumber}</strong>.</span>
+             {alerts && (
+                <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">Alarmas y Avisos</h3>
+                    {alerts.shortfall === 0 && alerts.lotsWithoutFixation.length === 0 && alerts.lotsNeedingIsf.length === 0 ? (
+                        <div className="p-3 text-sm rounded-md border border-green-500 bg-green-500/10 text-green-700 dark:text-green-400 flex items-center gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            <span>¡Todo en orden! No hay alertas pendientes para este contrato.</span>
+                        </div>
+                    ) : (
+                        <>
+                            {alerts.shortfall > 0 && (
+                                <div className="p-3 text-sm rounded-md border border-red-500 bg-red-500/10 text-red-700 dark:text-red-300 flex items-center gap-3">
+                                    <AlertIcon type="triangle" color="currentColor" />
+                                    <span>Faltan <strong>{alerts.shortfall.toFixed(2)} qqs.</strong> de primera para completar el contrato.</span>
                                 </div>
-                            );
-                        } else {
-                            const sobrante = difference;
-                            return (
-                                <div key={order.id} className="p-3 text-sm rounded-md border border-green-500 bg-green-500/10 text-green-700 dark:text-green-400 flex items-center gap-3">
-                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                    <span>Has completado la orden de trilla <strong>{order.orderNumber}</strong>{sobrante > 0.005 ? <>, tienes un sobrante estimado de <strong>{sobrante.toFixed(2)} qqs.</strong></> : '.'}</span>
-                                </div>
-                            );
-                        }
-                    })}
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-muted-foreground whitespace-nowrap">
-                        <thead className="text-xs uppercase bg-muted">
-                            <tr>
-                                <th className="px-4 py-2">No. Orden</th>
-                                <th className="px-4 py-2">Fecha</th>
-                                <th className="px-4 py-2">Partidas</th>
-                                <th className="px-4 py-2 text-right">Total a Trillar</th>
-                                <th className="px-4 py-2 text-right">Total Primeras</th>
-                                <th className="px-4 py-2 text-right">Total Catadura</th>
-                                <th className="px-4 py-2 text-right">Diferencia</th>
-                                <th className="px-4 py-2 text-center">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                             {loading ? (
-                                <tr><td colSpan={8} className="text-center py-10">Cargando órdenes...</td></tr>
-                            ) : threshingOrders.length > 0 ? (
-                                threshingOrders.map(order => {
-                                    const neededPrimeras = order.lotIds.reduce((sum, lotId) => {
-                                        const lot = lots.find(l => l.id === lotId);
-                                        return sum + (lot?.pesoQqs ?? 0);
-                                    }, 0);
-                                    const difference = order.totalPrimeras - neededPrimeras;
-
-                                    return (
-                                        <tr key={order.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setOrderToView(order)}>
-                                            <td className="px-4 py-3 font-semibold text-blue-600">{order.orderNumber}</td>
-                                            <td className="px-4 py-3">{formatDate(order.creationDate)}</td>
-                                            <td className="px-4 py-3 text-xs">{order.lotIds.map(id => lots.find(l=>l.id===id)?.partida || id).join(', ')}</td>
-                                            <td className="px-4 py-3 text-right">{order.totalToThresh.toFixed(2)}</td>
-                                            <td className="px-4 py-3 text-right">{order.totalPrimeras.toFixed(2)}</td>
-                                            <td className="px-4 py-3 text-right">{order.totalCatadura.toFixed(2)}</td>
-                                            <td className={`px-4 py-3 text-right font-bold ${difference < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{difference.toFixed(2)}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center justify-center gap-4">
-                                                    <button onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }} className="text-gray-500 hover:text-gray-700" title="Imprimir Orden"><PrinterIcon className="w-4 h-4" /></button>
-                                                    {permissions?.edit && <button onClick={(e) => { e.stopPropagation(); setOrderToEdit(order); }} className="text-yellow-500 hover:text-yellow-700" title="Ver/Editar Orden"><PencilIcon className="w-4 h-4" /></button>}
-                                                    {permissions?.delete && <button onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }} className="text-red-500 hover:text-red-700" title="Anular Orden"><TrashIcon className="w-4 h-4" /></button>}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            ) : (
-                                <tr><td colSpan={8} className="text-center py-10">No hay órdenes de trilla para este contrato.</td></tr>
                             )}
-                        </tbody>
-                    </table>
+                            {alerts.lotsWithoutFixation.length > 0 && permissions.lots.viewPrices && (
+                                <div className="p-3 text-sm rounded-md border border-yellow-500 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 flex items-center gap-3">
+                                    <AlertIcon type="triangle" color="currentColor" />
+                                    <span>Hay <strong>{alerts.lotsWithoutFixation.length}</strong> partida(s) pendientes de fijación: {alerts.lotsWithoutFixation.map(l => l.partida).join(', ')}</span>
+                                </div>
+                            )}
+                            {alerts.lotsNeedingIsf.length > 0 && (
+                                <div className="p-3 text-sm rounded-md border border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300 flex items-center gap-3">
+                                     <AlertIcon type="dot" color="currentColor" />
+                                    <span>Hay <strong>{alerts.lotsNeedingIsf.length}</strong> partida(s) que requieren ISF y no ha sido enviado: {alerts.lotsNeedingIsf.map(l => l.partida).join(', ')}</span>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
-            </div>
+            )}
+
+            {permissions.lots.view && (
+                <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-foreground">Listado de Partidas</h3>
+                        {permissions.lots.add && <button onClick={() => setView('createLot')} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                            <PlusIcon className="w-4 h-4" /> Agregar Partida
+                        </button>}
+                    </div>
+                    
+                    <div className="overflow-x-auto mt-4">
+                        <table className="w-full text-sm text-left text-muted-foreground whitespace-nowrap">
+                            <thead className="text-xs uppercase bg-muted">
+                                <tr>
+                                    <th className="px-4 py-2">Partida</th>
+                                    <th className="px-4 py-2">Bultos</th>
+                                    <th className="px-4 py-2">Empaque</th>
+                                    <th className="px-4 py-2 text-right">Peso Kg</th>
+                                    {permissions.lots.viewPrices && <th className="px-4 py-2 text-right">Diferencial</th>}
+                                    {permissions.lots.viewPrices && <th className="px-4 py-2 text-right">Precio Final</th>}
+                                    <th className="px-4 py-2">Muestra Enviada</th>
+                                    <th className="px-4 py-2">Aprobada</th>
+                                    <th className="px-4 py-2">ISF Req.</th>
+                                    <th className="px-4 py-2">ISF Enviado</th>
+                                    <th className="px-4 py-2 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr><td colSpan={11} className="text-center py-10">Cargando partidas...</td></tr>
+                                ) : lots.length > 0 ? (
+                                    lots.map(lot => {
+                                        const needsFixation = (!lot.fijacion || lot.fijacion === 0) && permissions.lots.viewPrices;
+                                        const needsIsfSent = lot.isf && !lot.isfSent;
+                                        return (
+                                            <tr key={lot.id} data-lot-id={lot.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedLot(lot)}>
+                                                <td className="px-4 py-3 font-semibold">
+                                                    <div className="flex items-center gap-2">
+                                                        {needsFixation && <AlertIcon type="triangle" color="orange" />}
+                                                        {needsIsfSent && <AlertIcon type="dot" color="blue" />}
+                                                        <span className={needsFixation ? 'text-amber-500' : 'text-green-600'}>{lot.partida}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">{lot.bultos}</td>
+                                                <td className="px-4 py-3">{lot.empaque}</td>
+                                                <td className="px-4 py-3 text-right">{lot.pesoKg.toFixed(2)}</td>
+                                                {permissions.lots.viewPrices && <td className="px-4 py-3 text-right">${contract.differential.toFixed(2)}</td>}
+                                                {permissions.lots.viewPrices && <td className="px-4 py-3 text-right font-medium text-foreground">${lot.precioFinal.toFixed(2)}</td>}
+                                                <td className="px-4 py-3">{lot.guiaMuestra ? 'Sí' : 'No'}</td>
+                                                <td className="px-4 py-3">{lot.muestraAprobada ? 'Sí' : 'No'}</td>
+                                                <td className="px-4 py-3">{lot.isf ? 'Sí' : 'No'}</td>
+                                                <td className="px-4 py-3">{lot.isf ? (lot.isfSent ? 'Sí' : 'No') : 'N/A'}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center justify-center gap-4">
+                                                        {permissions.lots.edit && <button onClick={(e) => { e.stopPropagation(); setLotToEdit(lot); }} className="text-yellow-500 hover:text-yellow-700"><PencilIcon className="w-4 h-4" /></button>}
+                                                        {permissions.lots.delete && <button onClick={(e) => { e.stopPropagation(); setLotToDelete(lot); }} className="text-red-500 hover:text-red-700"><TrashIcon className="w-4 h-4" /></button>}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr><td colSpan={11} className="text-center py-10">No hay partidas para este contrato.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {permissions.threshing.view && (
+                <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-foreground">Órdenes de Trilla</h3>
+                        {permissions.threshing.add && <button onClick={() => setView('createThreshingOrder')} disabled={!!contract.isServiceContract} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed">
+                            <FilePlusIcon className="w-4 h-4" /> Crear Orden de Trilla
+                        </button>}
+                    </div>
+                    <div className="space-y-2 mb-4">
+                        {threshingOrders.map(order => {
+                            const neededPrimeras = order.lotIds.reduce((sum, lotId) => {
+                                const lot = lots.find(l => l.id === lotId);
+                                return sum + (lot?.pesoQqs ?? 0);
+                            }, 0);
+                            const difference = order.totalPrimeras - neededPrimeras;
+
+                            if (difference < -0.005) {
+                                const faltan = Math.abs(difference);
+                                return (
+                                    <div key={order.id} className="p-3 text-sm rounded-md border border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300 flex items-center gap-3">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" className="flex-shrink-0" fill="currentColor"><path d="M12 2L2 22h20L12 2z" /></svg>
+                                        <span>Faltan <strong>{faltan.toFixed(2)} qqs.</strong> de primera para completar la orden <strong>{order.orderNumber}</strong>.</span>
+                                    </div>
+                                );
+                            } else {
+                                const sobrante = difference;
+                                return (
+                                    <div key={order.id} className="p-3 text-sm rounded-md border border-green-500 bg-green-500/10 text-green-700 dark:text-green-400 flex items-center gap-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                        <span>Has completado la orden de trilla <strong>{order.orderNumber}</strong>{sobrante > 0.005 ? <>, tienes un sobrante estimado de <strong>{sobrante.toFixed(2)} qqs.</strong></> : '.'}</span>
+                                    </div>
+                                );
+                            }
+                        })}
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left text-muted-foreground whitespace-nowrap">
+                            <thead className="text-xs uppercase bg-muted">
+                                <tr>
+                                    <th className="px-4 py-2">No. Orden</th>
+                                    <th className="px-4 py-2">Fecha</th>
+                                    <th className="px-4 py-2">Partidas</th>
+                                    <th className="px-4 py-2 text-right">Total a Trillar</th>
+                                    <th className="px-4 py-2 text-right">Total Primeras</th>
+                                    <th className="px-4 py-2 text-right">Total Catadura</th>
+                                    <th className="px-4 py-2 text-right">Diferencia</th>
+                                    <th className="px-4 py-2 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr><td colSpan={8} className="text-center py-10">Cargando órdenes...</td></tr>
+                                ) : threshingOrders.length > 0 ? (
+                                    threshingOrders.map(order => {
+                                        const neededPrimeras = order.lotIds.reduce((sum, lotId) => {
+                                            const lot = lots.find(l => l.id === lotId);
+                                            return sum + (lot?.pesoQqs ?? 0);
+                                        }, 0);
+                                        const difference = order.totalPrimeras - neededPrimeras;
+
+                                        return (
+                                            <tr key={order.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setOrderToView(order)}>
+                                                <td className="px-4 py-3 font-semibold text-red-600 dark:text-red-500">{order.orderNumber}</td>
+                                                <td className="px-4 py-3">{formatDate(order.creationDate)}</td>
+                                                <td className="px-4 py-3 text-xs">{order.lotIds.map(id => lots.find(l=>l.id===id)?.partida || id).join(', ')}</td>
+                                                <td className="px-4 py-3 text-right">{order.totalToThresh.toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right">{order.totalPrimeras.toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right">{order.totalCatadura.toFixed(2)}</td>
+                                                <td className={`px-4 py-3 text-right font-bold ${difference < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{difference.toFixed(2)}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center justify-center gap-4">
+                                                        <button onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }} className="text-gray-500 hover:text-gray-700" title="Imprimir Orden"><PrinterIcon className="w-4 h-4" /></button>
+                                                        {permissions.threshing.edit && <button onClick={(e) => { e.stopPropagation(); setOrderToEdit(order); }} className="text-yellow-500 hover:text-yellow-700" title="Ver/Editar Orden"><PencilIcon className="w-4 h-4" /></button>}
+                                                        {permissions.threshing.delete && <button onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }} className="text-red-500 hover:text-red-700" title="Anular Orden"><TrashIcon className="w-4 h-4" /></button>}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr><td colSpan={8} className="text-center py-10">No hay órdenes de trilla para este contrato.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
             
-            {selectedLot && <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} />}
+            {selectedLot && <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} canViewPrices={permissions.lots.viewPrices === true} />}
 
             {lotToEdit && (
                 <EditContractLotForm
@@ -540,6 +565,7 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
                     contract={contract}
                     onSave={handleUpdateLot}
                     onCancel={() => setLotToEdit(null)}
+                    canViewPrices={permissions.lots.viewPrices === true}
                 />
             )}
 
@@ -594,110 +620,17 @@ const ContractDetailView: React.FC<{ contract: Contract; onBack: () => void; con
     );
 };
 
-const GlobalAlertsBar: React.FC<{
-    contracts: Contract[];
-    lots: ContractLot[];
-    threshingOrders: ThreshingOrder[];
-}> = ({ contracts, lots, threshingOrders }) => {
-    const alerts = useMemo(() => {
-        const activeAlerts: { text: string, icon: React.ReactNode, colorClass: string, pulse: boolean }[] = [];
-        if (!contracts || !lots) return [];
-
-        const lotsByContract = lots.reduce((acc, lot) => {
-            if (!acc[lot.contractId]) acc[lot.contractId] = [];
-            acc[lot.contractId].push(lot);
-            return acc;
-        }, {} as Record<string, ContractLot[]>);
-
-        for (const contract of contracts) {
-            if (contract.isFinished || contract.isServiceContract) continue;
-
-            const contractLots = lotsByContract[contract.id] || [];
-            
-            // Threshing Alert
-            const totalProducedPrimeras = threshingOrders
-                .filter(order => order.contractId === contract.id)
-                .reduce((sum, order) => sum + order.totalPrimeras, 0);
-            
-            const contractTotalQqs = contractLots.reduce((sum, l) => sum + l.pesoQqs, 0);
-            const missingQqsForCompletion = contractTotalQqs - totalProducedPrimeras;
-
-            if (missingQqsForCompletion > 0.01) {
-                activeAlerts.push({
-                    text: `Contrato ${contract.contractNumber}: Faltan ${missingQqsForCompletion.toFixed(2)} qqs. para completar`,
-                    icon: <AlertIcon type="triangle" color="orange" />,
-                    colorClass: 'border-orange-500 text-orange-600 dark:text-orange-400',
-                    pulse: false,
-                });
-            }
-            
-            // Fixation Alert
-            const pendingFixationLots = contractLots.filter(l => !l.fijacion || l.fijacion === 0);
-            if (pendingFixationLots.length > 0) {
-                const lotNumbers = pendingFixationLots.map(l => l.partida.split('/').pop()).join(', ');
-                const plural = pendingFixationLots.length > 1 ? 's' : '';
-                activeAlerts.push({
-                    text: `Contrato ${contract.contractNumber}: Partida${plural} ${lotNumbers} sin fijación`,
-                    icon: <AlertIcon type="triangle" color="red" isPulsing />,
-                    colorClass: 'border-red-500 text-red-600 dark:text-red-400',
-                    pulse: true,
-                });
-            }
-
-            // Sample Approval Alert
-            const pendingSampleLots = contractLots.filter(l => !l.muestraAprobada);
-            if (pendingSampleLots.length > 0) {
-                const lotNumbers = pendingSampleLots.map(l => l.partida.split('/').pop()).join(', ');
-                const plural = pendingSampleLots.length > 1 ? 's' : '';
-                activeAlerts.push({
-                    text: `Contrato ${contract.contractNumber}: Partida${plural} ${lotNumbers} sin muestra aprobada`,
-                    icon: <AlertIcon type="triangle" color="orange" />, 
-                    colorClass: 'border-orange-500 text-orange-600 dark:text-orange-400',
-                    pulse: false,
-                });
-            }
-
-            // ISF Alert
-            const missingIsfSentLots = contractLots.filter(l => l.isf && !l.isfSent);
-            if (missingIsfSentLots.length > 0) {
-                const lotNumbers = missingIsfSentLots.map(l => l.partida.split('/').pop()).join(', ');
-                const plural = missingIsfSentLots.length > 1 ? 's' : '';
-                 activeAlerts.push({
-                    text: `Contrato ${contract.contractNumber}: Partida${plural} ${lotNumbers} con ISF pendiente de envío`,
-                    icon: <AlertIcon type="dot" color="blue" />,
-                    colorClass: 'border-blue-500 text-blue-600 dark:text-blue-400',
-                    pulse: false,
-                });
-            }
-        }
-        
-        return activeAlerts;
-    }, [contracts, lots, threshingOrders]);
-
-    if (alerts.length === 0) return null;
-
-    return (
-        <div className="my-6">
-            <h3 className="text-md font-semibold text-foreground mb-3">Alertas y Avisos Globales</h3>
-            <div className="flex flex-wrap gap-3">
-                {alerts.map((alert, index) => (
-                    <div key={index} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-full bg-muted/50 border ${alert.colorClass}`}>
-                        {alert.icon}
-                        <span>{alert.text}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 interface ContractsPageProps {
   onCreateContractClick: (harvestYear: string) => void;
 }
 
 const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) => {
     const { roleDetails } = useAuth();
-    const permissions = roleDetails?.permissions.contracts;
+    const permissions = {
+        info: roleDetails?.permissions['contracts-info'] || { view: false, add: false, edit: false, delete: false },
+        lots: roleDetails?.permissions['contracts-lots'] || { view: false, add: false, edit: false, delete: false, viewPrices: false },
+        threshing: roleDetails?.permissions['contracts-threshing'] || { view: false, add: false, edit: false, delete: false },
+    };
     const [contracts, setContracts] = useState<Contract[]>([]);
     const [lots, setLots] = useState<ContractLot[]>([]);
     const [threshingOrders, setThreshingOrders] = useState<ThreshingOrder[]>([]);
@@ -709,6 +642,8 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
     const [showAll, setShowAll] = useState(false);
     const [selectedHarvestYear, setSelectedHarvestYear] = useState<string>(getCurrentHarvestYear());
     const [harvestYears, setHarvestYears] = useState<string[]>([]);
+    const { addToast } = useToast();
+    const { targetId, parentId, clearHighlight } = useHighlight();
 
     const fetchData = async () => {
         setLoading(true);
@@ -745,9 +680,36 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                 fetchData();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
+
+    useEffect(() => {
+        // Handle opening detail view for lot highlight
+        if (parentId && !loading) {
+            const contractToOpen = contracts.find(c => c.id === parentId);
+            if (contractToOpen) {
+                setSelectedContract(contractToOpen);
+                // Do not clear highlight here, the detail view will use it
+            }
+        }
+    }, [parentId, contracts, loading]);
+
+    useEffect(() => {
+        // Handle direct highlight for contract row (when not opening a detail view)
+        if (targetId && !parentId && !loading && !selectedContract) {
+            const element = document.querySelector(`[data-id="${targetId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-row');
+                setTimeout(() => {
+                    element.classList.remove('highlight-row');
+                    clearHighlight();
+                }, 4500);
+            }
+        }
+    }, [targetId, parentId, selectedContract, loading]);
+
 
     const filteredContracts = useMemo(() => {
         const baseFiltered = showAll
@@ -789,12 +751,20 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
     const confirmDelete = async () => {
         if (!contractToDelete) return;
         try {
+            const associatedThreshingOrders = await api.getCollection<ThreshingOrder>('threshingOrders', order => order.contractId === contractToDelete.id);
+            if (associatedThreshingOrders.length > 0) {
+                addToast(`No se puede eliminar el contrato '${contractToDelete.contractNumber}' porque está asociado a ${associatedThreshingOrders.length} orden(es) de trilla. Primero debe anular las órdenes asociadas.`, 'error');
+                setContractToDelete(null);
+                return;
+            }
+
             const lots = await api.getCollection<ContractLot>('contractLots', lot => lot.contractId === contractToDelete.id);
             const deleteLotPromises = lots.map(lot => api.deleteDocument('contractLots', lot.id!));
             await Promise.all(deleteLotPromises);
             await api.deleteDocument('contracts', contractToDelete.id);
         } catch (error) {
             console.error("Error deleting contract and its lots:", error);
+            addToast("No se pudo eliminar el contrato.", 'error');
         } finally {
             setContractToDelete(null);
         }
@@ -803,7 +773,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
     if (selectedContract) {
         return <ContractDetailView 
                     contract={selectedContract} 
-                    onBack={() => setSelectedContract(null)} 
+                    onBack={() => { setSelectedContract(null); clearHighlight(); }} 
                     contractQqs={contractQqs.get(selectedContract.id) || 0}
                     permissions={permissions}
                 />;
@@ -829,13 +799,11 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                         <ToggleSwitch id="showAllContracts" checked={showAll} onChange={setShowAll} />
                         <label htmlFor="showAllContracts" className="text-sm font-medium text-muted-foreground select-none">Mostrar todos</label>
                     </div>
-                    {permissions?.add && <button onClick={() => onCreateContractClick(selectedHarvestYear)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                    {permissions.info.add && <button onClick={() => onCreateContractClick(selectedHarvestYear)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
                         <PlusIcon className="w-4 h-4" /> Crear Contrato
                     </button>}
                 </div>
             </div>
-
-            <GlobalAlertsBar contracts={contracts} lots={lots} threshingOrders={threshingOrders} />
 
             <div className="overflow-x-auto mt-6">
                 <table className="w-full text-sm text-left text-muted-foreground">
@@ -848,38 +816,47 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                             <th scope="col" className="px-6 py-3 text-right">Cantidad</th>
                             <th scope="col" className="px-6 py-3">Posición</th>
                             <th scope="col" className="px-6 py-3">Mes de Embarque</th>
-                            <th scope="col" className="px-6 py-3 text-right">Diferencial</th>
-                            <th scope="col" className="px-6 py-3 text-center">Fijaciones Pendientes</th>
+                            {permissions.lots.viewPrices && <th scope="col" className="px-6 py-3 text-right">Diferencial</th>}
+                            <th scope="col" className="px-6 py-3 text-right">Dif. Para Completar Contrato</th>
+                            {permissions.lots.viewPrices && <th scope="col" className="px-6 py-3 text-center">Fijaciones Pendientes</th>}
                             <th scope="col" className="px-6 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={10} className="text-center py-10">Cargando contratos...</td></tr>
+                            <tr><td colSpan={11} className="text-center py-10">Cargando contratos...</td></tr>
                         ) : filteredContracts.length > 0 ? (
                             filteredContracts.map((contract) => {
                                 const contractLots = lotsByContractId[contract.id] || [];
                                 const fixPendCount = contractLots.filter(l => !l.fijacion || l.fijacion === 0).length;
-                                
+                                const totalContractQqs = contractQqs.get(contract.id) || 0;
+                                const totalProducedPrimeras = threshingOrders
+                                    .filter(order => order.contractId === contract.id)
+                                    .reduce((sum, order) => sum + order.totalPrimeras, 0);
+                                const diffParaCompletar = totalContractQqs - totalProducedPrimeras;
+
                                 return (
-                                    <tr key={contract.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedContract(contract)}>
+                                    <tr key={contract.id} data-id={contract.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedContract(contract)}>
                                         <td className="px-6 py-4">{formatDate(contract.saleDate)}</td>
-                                        <td className="px-6 py-4 font-medium text-foreground">{contract.contractNumber}</td>
-                                        <td className="px-6 py-4 text-foreground">{contract.buyerName}</td>
-                                        <td className="px-6 py-4">{contract.coffeeType}</td>
+                                        <td className="px-6 py-4 font-medium text-red-600 dark:text-red-500">{contract.contractNumber}</td>
+                                        <td className="px-6 py-4 text-blue-600 dark:text-blue-500">{contract.buyerName}</td>
+                                        <td className="px-6 py-4 text-green-600 dark:text-green-500">{contract.coffeeType}</td>
                                         <td className="px-6 py-4 text-right">{(contractQqs.get(contract.id) || 0).toFixed(2)}</td>
                                         <td className="px-6 py-4">{contract.position}</td>
                                         <td className="px-6 py-4">{contract.shipmentMonth}</td>
-                                        <td className="px-6 py-4 text-right">${contract.differential.toFixed(2)}</td>
-                                        <td className={`px-6 py-4 text-center font-bold ${fixPendCount > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                            {fixPendCount > 0 ? fixPendCount : '✓'}
+                                        {permissions.lots.viewPrices && <td className="px-6 py-4 text-right font-semibold text-pink-600 dark:text-pink-500">${contract.differential.toFixed(2)}</td>}
+                                        <td className={`px-6 py-4 text-right font-bold ${diffParaCompletar > 0.005 ? 'text-red-500' : 'text-green-500'}`}>
+                                            {diffParaCompletar.toFixed(2)}
                                         </td>
+                                        {permissions.lots.viewPrices && <td className={`px-6 py-4 text-center font-bold ${fixPendCount > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                            {fixPendCount > 0 ? fixPendCount : '✓'}
+                                        </td>}
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-center gap-4">
-                                                {permissions?.edit && <button className="text-yellow-500 hover:text-yellow-700" onClick={(e) => handleEditClick(e, contract)}>
+                                                {permissions.info.edit && <button className="text-yellow-500 hover:text-yellow-700" onClick={(e) => handleEditClick(e, contract)}>
                                                     <PencilIcon className="w-4 h-4" />
                                                 </button>}
-                                                {permissions?.delete && <button className="text-red-500 hover:text-red-700" onClick={(e) => handleDeleteClick(e, contract)}>
+                                                {permissions.info.delete && <button className="text-red-500 hover:text-red-700" onClick={(e) => handleDeleteClick(e, contract)}>
                                                     <TrashIcon className="w-4 h-4" />
                                                 </button>}
                                             </div>
@@ -888,7 +865,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                                 );
                             })
                         ) : (
-                             <tr><td colSpan={10} className="text-center py-10">{showAll ? 'No hay contratos para mostrar.' : 'No hay contratos activos. ¡Crea uno o activa el filtro "Mostrar todos"!'}</td></tr>
+                             <tr><td colSpan={11} className="text-center py-10">{showAll ? 'No hay contratos para mostrar.' : 'No hay contratos activos. ¡Crea uno o activa el filtro "Mostrar todos"!'}</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -898,6 +875,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ onCreateContractClick }) 
                     contract={contractToEdit}
                     onSave={handleUpdateContract}
                     onCancel={() => setContractToEdit(null)}
+                    canFinalize={permissions.info.canFinalize}
                 />
             )}
             {contractToDelete && (

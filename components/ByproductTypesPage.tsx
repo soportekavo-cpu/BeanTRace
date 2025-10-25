@@ -1,10 +1,7 @@
 
 
-
-
-
 import React, { useState, useEffect } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { ByproductType } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import PlusIcon from './icons/PlusIcon';
@@ -41,8 +38,8 @@ const ByproductTypesPage: React.FC = () => {
                 fetchData();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleAddItem = async (e: React.FormEvent) => {
@@ -76,7 +73,6 @@ const ByproductTypesPage: React.FC = () => {
         if (!itemToEdit || !itemToEdit.tipo.trim()) return;
 
         try {
-            // FIX: Explicitly provide the generic type to `updateDocument` to ensure correct type inference.
             await api.updateDocument<ByproductType>('byproductTypes', itemToEdit.id!, { tipo: itemToEdit.tipo.trim() });
             setItemToEdit(null);
         } catch (error) {
@@ -119,7 +115,7 @@ const ByproductTypesPage: React.FC = () => {
                         ) : byproductTypes.length > 0 ? (
                             byproductTypes.map((item) => (
                                 <tr key={item.id} className="border-b border-border hover:bg-muted/50">
-                                    <td className="px-6 py-4 font-medium text-foreground">{item.tipo}</td>
+                                    <td className="px-6 py-4 font-medium text-green-600 dark:text-green-400">{item.tipo}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
                                             {permissions?.edit && <button className="text-yellow-500 hover:text-yellow-700" onClick={() => setItemToEdit(item)}><PencilIcon className="w-4 h-4" /></button>}

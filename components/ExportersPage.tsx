@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+
+
+import React, { useState, useEffect, useRef } from 'react';
+import api from '../services/localStorageManager';
 import { Exporter, Contract } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
+import { useToast } from '../hooks/useToast';
 
 const ExportersPage: React.FC = () => {
     const [exporters, setExporters] = useState<Exporter[]>([]);
@@ -14,6 +17,10 @@ const ExportersPage: React.FC = () => {
     const [exporterToDelete, setExporterToDelete] = useState<Exporter | null>(null);
     const [exporterToEdit, setExporterToEdit] = useState<Exporter | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
+    const { addToast } = useToast();
+    
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [exporterForLogoUpload, setExporterForLogoUpload] = useState<Exporter | null>(null);
 
     useEffect(() => {
         const fetchExporters = async () => {
@@ -37,8 +44,8 @@ const ExportersPage: React.FC = () => {
             }
         };
 
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleAddExporter = async (e: React.FormEvent) => {
@@ -73,7 +80,7 @@ const ExportersPage: React.FC = () => {
         try {
             const contracts = await api.getCollection<Contract>('contracts', c => c.exporterId === exporterToDelete.id);
             if (contracts.length > 0) {
-                alert(`No se puede eliminar la exportadora '${exporterToDelete.name}' porque está asociada a ${contracts.length} contrato(s).`);
+                addToast(`No se puede eliminar la exportadora '${exporterToDelete.name}' porque está asociada a ${contracts.length} contrato(s).`, 'error');
                 setExporterToDelete(null);
                 return;
             }
@@ -112,9 +119,52 @@ const ExportersPage: React.FC = () => {
             setIsUpdating(false);
         }
     };
+
+    const handleLogoUploadClick = (exporter: Exporter) => {
+        setExporterForLogoUpload(exporter);
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!event.target.files || event.target.files.length === 0 || !exporterForLogoUpload) {
+            return;
+        }
+
+        const file = event.target.files[0];
+        const reader = new FileReader();
+
+        reader.onload = async () => {
+            try {
+                await api.updateDocument<Exporter>('exporters', exporterForLogoUpload.id, {
+                    logo: reader.result as string
+                });
+            } catch (error) {
+                console.error("Error uploading logo:", error);
+            } finally {
+                setExporterForLogoUpload(null);
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = ""; // Reset file input
+                }
+            }
+        };
+
+        reader.onerror = (error) => {
+            console.error("Error reading file:", error);
+            setExporterForLogoUpload(null);
+        };
+        
+        reader.readAsDataURL(file);
+    };
     
     return (
         <div>
+            <input 
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept="image/png, image/jpeg, image/svg+xml"
+                onChange={handleFileChange}
+            />
             <form onSubmit={handleAddExporter} className="space-y-4 mb-6 pb-6 border-b border-border">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <input
@@ -149,19 +199,34 @@ const ExportersPage: React.FC = () => {
                         <tr>
                             <th scope="col" className="px-6 py-3">Nombre</th>
                             <th scope="col" className="px-6 py-3">No. Licencia</th>
+                            <th scope="col" className="px-6 py-3">Logo</th>
                             <th scope="col" className="px-6 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={3} className="text-center py-10">Cargando...</td></tr>
+                            <tr><td colSpan={4} className="text-center py-10">Cargando...</td></tr>
                         ) : exporters.length > 0 ? (
                             exporters.map((exporter) => (
                                 <tr key={exporter.id} className="border-b border-border hover:bg-muted/50">
-                                    <td className="px-6 py-4 font-medium text-foreground">{exporter.name}</td>
+                                    <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{exporter.name}</td>
                                     <td className="px-6 py-4 font-medium text-foreground">{exporter.licenseNumber}</td>
                                     <td className="px-6 py-4">
+                                        {exporter.logo ? (
+                                            <img src={exporter.logo} alt={`${exporter.name} logo`} className="h-10 w-auto bg-white p-1 rounded border"/>
+                                        ) : (
+                                            <div className="h-10 w-20 bg-muted/50 rounded border flex items-center justify-center text-xs">Sin Logo</div>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-4">
+                                            <button 
+                                                className="text-blue-500 hover:text-blue-700" 
+                                                onClick={() => handleLogoUploadClick(exporter)}
+                                                title="Subir Logo"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                                            </button>
                                             <button className="text-yellow-500 hover:text-yellow-700" onClick={() => handleEditClick(exporter)}>
                                                 <PencilIcon className="w-4 h-4" />
                                             </button>
@@ -173,7 +238,7 @@ const ExportersPage: React.FC = () => {
                                 </tr>
                             ))
                         ) : (
-                             <tr><td colSpan={3} className="text-center py-10">No hay exportadoras. ¡Agrega la primera!</td></tr>
+                             <tr><td colSpan={4} className="text-center py-10">No hay exportadoras. ¡Agrega la primera!</td></tr>
                         )}
                     </tbody>
                 </table>

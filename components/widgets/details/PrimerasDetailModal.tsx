@@ -3,7 +3,7 @@ import { Viñeta } from '../../../types';
 import { formatNumber } from '../../../utils/formatting';
 
 interface PrimerasDetailModalProps {
-    primerasType: 'Primeras L.' | 'Primeras N.';
+    primerasType: 'L. Primeras' | 'N. Primeras';
     vignettes: Viñeta[];
     onClose: () => void;
 }
@@ -14,11 +14,11 @@ const PrimerasDetailModal: React.FC<PrimerasDetailModalProps> = ({ primerasType,
         const isInStock = (v.status === 'En Bodega' || v.status === 'Mezclada Parcialmente') && v.pesoNeto > 0.005;
         if (!isInStock) return false;
     
-        if (primerasType === 'Primeras L.') {
-            return v.tipo === 'Primeras L.';
+        if (primerasType === 'L. Primeras') {
+            return v.tipo === 'L. Primeras';
         }
-        if (primerasType === 'Primeras N.') {
-            return v.tipo === 'Primeras N.';
+        if (primerasType === 'N. Primeras') {
+            return v.tipo === 'N. Primeras';
         }
         return false;
     });

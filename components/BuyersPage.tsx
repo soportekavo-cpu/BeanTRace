@@ -1,9 +1,12 @@
+
+
 import React, { useState, useEffect } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Buyer, Contract } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import PencilIcon from './icons/PencilIcon';
 import TrashIcon from './icons/TrashIcon';
+import { useToast } from '../hooks/useToast';
 
 const BuyersPage: React.FC = () => {
     const [buyers, setBuyers] = useState<Buyer[]>([]);
@@ -12,6 +15,7 @@ const BuyersPage: React.FC = () => {
     const [buyerToDelete, setBuyerToDelete] = useState<Buyer | null>(null);
     const [buyerToEdit, setBuyerToEdit] = useState<Buyer | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
+    const { addToast } = useToast();
     
     const initialBuyerState = {
         name: '',
@@ -43,8 +47,8 @@ const BuyersPage: React.FC = () => {
                 fetchBuyers();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,13 +84,14 @@ const BuyersPage: React.FC = () => {
         try {
             const contracts = await api.getCollection<Contract>('contracts', c => c.buyerId === buyerToDelete.id);
             if (contracts.length > 0) {
-                alert(`No se puede eliminar el comprador '${buyerToDelete.name}' porque está asociado a ${contracts.length} contrato(s).`);
+                addToast(`No se puede eliminar el comprador '${buyerToDelete.name}' porque está asociado a ${contracts.length} contrato(s).`, 'error');
                 setBuyerToDelete(null);
                 return;
             }
             await api.deleteDocument('buyers', buyerToDelete.id!);
         } catch (error) {
             console.error("Error deleting buyer:", error);
+            addToast("No se pudo eliminar el comprador.", 'error');
         } finally {
             setBuyerToDelete(null);
         }
@@ -156,7 +161,7 @@ const BuyersPage: React.FC = () => {
                         ) : buyers.length > 0 ? (
                             buyers.map((buyer) => (
                                 <tr key={buyer.id} className="border-b border-border hover:bg-muted/50">
-                                    <td className="px-6 py-4 font-medium text-foreground">{buyer.name}</td>
+                                    <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{buyer.name}</td>
                                     <td className="px-6 py-4 font-medium text-foreground">{buyer.contactPerson}</td>
                                     <td className="px-6 py-4 font-medium text-foreground">{buyer.email}</td>
                                     <td className="px-6 py-4">

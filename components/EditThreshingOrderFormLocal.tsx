@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { Client, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso } from '../types';
+import { Client, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso, NotificationSetting } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import { printComponent } from '../utils/printUtils';
 import ThreshingOrderPDF from './ThreshingOrderPDF';
+import { useToast } from '../hooks/useToast';
+import { useAuth } from '../contexts/AuthContext';
+import ToggleSwitch from './ToggleSwitch';
 
 interface EditThreshingOrderFormLocalProps {
     order: ThreshingOrder;
@@ -22,12 +25,15 @@ interface InputRow {
 }
 
 const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = ({ order, onCancel, onSaveSuccess }) => {
+    const { roleDetails } = useAuth();
     const [clientId, setClientId] = useState(order.clientId || '');
     const [tipoCafe, setTipoCafe] = useState<'Lavado' | 'Natural'>(order.tipoCafe || 'Lavado');
     const [description, setDescription] = useState(order.description || '');
     const [lote, setLote] = useState(order.lote || '');
     const [tipoPreparacion, setTipoPreparacion] = useState(order.tipoPreparacion || '');
     const [pesoVendido, setPesoVendido] = useState(order.pesoVendido?.toString() || '');
+    const [isFinished, setIsFinished] = useState(order.isFinished || false);
+    const { addToast } = useToast();
 
     const [availableReceipts, setAvailableReceipts] = useState<PurchaseReceipt[]>([]);
     const [availableVignettes, setAvailableVignettes] = useState<Viñeta[]>([]);
@@ -134,23 +140,23 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                 delete updatedRow.projectedCataduraPercent;
             } else if (field === 'sourceId') {
                 updatedRow.sourceId = value as string;
+                const originalAmount = originalReceipts.find(or => or.receiptId === updatedRow.sourceId)?.amountToThresh || 0;
                 let maxAmount = 0;
-                if(updatedRow.inputType === 'Recibo') maxAmount = (Number(availableReceipts.find(r => r.id === value)?.enBodega) || 0) + originalAmount;
-                if(updatedRow.inputType === 'Viñeta') maxAmount = (Number(availableVignettes.find(v => v.id === value)?.pesoNeto) || 0) + originalAmount;
-                if(updatedRow.inputType === 'Mezcla') maxAmount = (Number(availableMezclas.find(m => m.id === value)?.sobranteEnBodega) || 0) + originalAmount;
+                if(updatedRow.inputType === 'Recibo') maxAmount = (availableReceipts.find(r => r.id === value)?.enBodega || 0) + originalAmount;
+                if(updatedRow.inputType === 'Viñeta') maxAmount = (availableVignettes.find(v => v.id === value)?.pesoNeto || 0) + originalAmount;
+                if(updatedRow.inputType === 'Mezcla') maxAmount = (availableMezclas.find(m => m.id === value)?.sobranteEnBodega || 0) + originalAmount;
                 updatedRow.amountToThresh = maxAmount;
             } else if (field === 'amountToThresh') {
-                 let maxAmount = 0;
-                if(row.inputType === 'Recibo') maxAmount = (Number(availableReceipts.find(r => r.id === row.sourceId)?.enBodega) || 0) + originalAmount;
-                if(row.inputType === 'Viñeta') maxAmount = (Number(availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto) || 0) + originalAmount;
-                if(row.inputType === 'Mezcla') maxAmount = (Number(availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega) || 0) + originalAmount;
-                if (Number(value) > maxAmount) {
-                    (updatedRow as any)[field] = maxAmount;
-                } else {
-                    (updatedRow as any)[field] = value;
-                }
+                const originalAmount = originalReceipts.find(or => or.receiptId === row.sourceId)?.amountToThresh || 0;
+                let maxAmount = 0;
+                if(row.inputType === 'Recibo') maxAmount = (availableReceipts.find(r => r.id === row.sourceId)?.enBodega || 0) + originalAmount;
+                if(row.inputType === 'Viñeta') maxAmount = (availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto || 0) + originalAmount;
+                if(row.inputType === 'Mezcla') maxAmount = (availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega || 0) + originalAmount;
+                
+                const newAmount = Number(value);
+                updatedRow.amountToThresh = newAmount > maxAmount ? maxAmount : newAmount;
             } else {
-                 (updatedRow as any)[field] = value;
+                (updatedRow as any)[field] = value;
             }
     
             return updatedRow;
@@ -187,6 +193,7 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                 const cataPercent = Number(row.projectedCataduraPercent) || 0;
                 primeras = amount * (primPercent / 100);
                 catadura = amount * (cataPercent / 100);
+
                 if (row.inputType === 'Viñeta') {
                     const vignette = availableVignettes.find(v => v.id === row.sourceId);
                     if (vignette) sourceInfo = { coffeeType: vignette.tipo };
@@ -195,9 +202,11 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                     if (mezcla) sourceInfo = { coffeeType: mezcla.tipoMezcla };
                 }
             }
+            
             totalToThresh += amount;
             totalPrimeras += primeras;
             totalCatadura += catadura;
+
             return { ...row, primeras, catadura, ...sourceInfo };
         });
 
@@ -207,24 +216,35 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
         return { totalToThresh, totalPrimeras, totalCatadura, difference, detailedRows };
     }, [inputRows, availableReceipts, availableVignettes, availableMezclas, suppliers, pesoVendido]);
 
+    const triggerNotificationSimulation = async (order: ThreshingOrder) => {
+        try {
+            const settings = await api.getCollection<NotificationSetting>('notifications', s => s.event === 'update-threshing-order');
+            if (settings.length > 0 && settings[0].emails) {
+                addToast(`Simulación de Notificación: Correo enviado a ${settings[0].emails} por la actualización de la orden ${order.orderNumber}.`, 'info');
+            }
+        } catch (error) {
+            console.error("Failed to check for notification settings:", error);
+        }
+    };
+
     const handleSave = async () => {
-        if (!clientId) {
-            alert('Por favor, selecciona un cliente.');
+         if (!clientId) {
+            addToast('Por favor, selecciona un cliente para guardar la orden.', 'error');
             return;
         }
         setIsSaving(true);
-         try {
+        try {
             const inventoryChanges = new Map<string, { type: 'Recibo' | 'Viñeta' | 'Mezcla', delta: number }>();
 
             originalReceipts.forEach(or => {
                 const change = inventoryChanges.get(or.receiptId) || { type: or.inputType, delta: 0 };
-                change.delta += Number(or.amountToThresh);
+                change.delta += Number(or.amountToThresh); // Add back to inventory
                 inventoryChanges.set(or.receiptId, change);
             });
     
             calculations.detailedRows.forEach(row => {
                 const change = inventoryChanges.get(row.sourceId) || { type: row.inputType, delta: 0 };
-                change.delta -= Number(row.amountToThresh);
+                change.delta -= Number(row.amountToThresh); // Subtract from inventory
                 inventoryChanges.set(row.sourceId, change);
             });
     
@@ -236,10 +256,14 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
 
             for (const [sourceId, change] of inventoryChanges.entries()) {
                 if (Math.abs(change.delta) < 0.001) continue;
+    
                 if (change.type === 'Recibo') {
                     const receipt = allReceipts.find(r => r.id === sourceId);
                     if (receipt) {
-                        updatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', sourceId, { enBodega: (Number(receipt.enBodega) || 0) + change.delta, trillado: (Number(receipt.trillado) || 0) - change.delta }));
+                        updatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', sourceId, {
+                            enBodega: (Number(receipt.enBodega) || 0) + change.delta,
+                            trillado: (Number(receipt.trillado) || 0) - change.delta
+                        }));
                     }
                 } else if (change.type === 'Mezcla') {
                     const mezcla = allMezclas.find(m => m.id === sourceId);
@@ -247,21 +271,29 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                         const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) + change.delta;
                         const newDespachado = (Number(mezcla.cantidadDespachada) || 0) - change.delta;
                         const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : (newDespachado > 0.005 ? 'Despachado Parcialmente' : 'Activo');
-                        updatePromises.push(api.updateDocument<Mezcla>('mezclas', sourceId, { sobranteEnBodega: newSobrante, cantidadDespachada: newDespachado, status: newStatus }));
+                        updatePromises.push(api.updateDocument<Mezcla>('mezclas', sourceId, {
+                            sobranteEnBodega: newSobrante,
+                            cantidadDespachada: newDespachado,
+                            status: newStatus
+                        }));
                     }
                 } else if (change.type === 'Viñeta') {
-                     let parentDoc: Rendimiento | Reproceso | undefined, collectionName: 'rendimientos' | 'reprocesos' | undefined, vignetteArrayKey: 'vignettes' | 'outputVignettes' | undefined;
+                    let parentDoc: Rendimiento | Reproceso | undefined;
+                    let collectionName: 'rendimientos' | 'reprocesos' | undefined;
+                    let vignetteArrayKey: 'vignettes' | 'outputVignettes' | undefined;
+    
                     parentDoc = allRendimientos.find(r => r.vignettes.some(v => v.id === sourceId));
-                    if (parentDoc) { collectionName = 'rendimientos'; vignetteArrayKey = 'vignettes'; }
+                    if(parentDoc) { collectionName = 'rendimientos'; vignetteArrayKey = 'vignettes'; }
                     else {
                         parentDoc = allReprocesos.find(r => r.outputVignettes.some(v => v.id === sourceId));
-                        if (parentDoc) { collectionName = 'reprocesos'; vignetteArrayKey = 'outputVignettes'; }
+                        if(parentDoc) { collectionName = 'reprocesos'; vignetteArrayKey = 'outputVignettes'; }
                     }
+    
                     if (parentDoc && collectionName && vignetteArrayKey) {
                         const updatedVignettes = (parentDoc[vignetteArrayKey] as Viñeta[]).map(v => {
                             if (v.id === sourceId) {
                                 const newPesoNeto = v.pesoNeto + change.delta;
-                                const newStatus: Viñeta['status'] = newPesoNeto <= 0.005 ? 'Utilizada en Trilla' : (Math.abs(newPesoNeto - v.originalPesoNeto) < 0.005 ? 'En Bodega' : 'Mezclada Parcialmente');
+                                const newStatus: Viñeta['status'] = newPesoNeto <= 0.005 ? 'Utilizada en Trilla' : (Math.abs(newPesoNeto - (v.originalPesoNeto || 0)) < 0.005 ? 'En Bodega' : 'Mezclada Parcialmente');
                                 return { ...v, pesoNeto: newPesoNeto, status: newStatus };
                             }
                             return v;
@@ -272,26 +304,42 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
             }
             await Promise.all(updatePromises);
     
-            await Promise.all(originalReceipts.map(or => api.deleteDocument('threshingOrderReceipts', or.id!)));
-            
+            const deleteOldReceipts = originalReceipts.map(or => api.deleteDocument('threshingOrderReceipts', or.id!));
+            await Promise.all(deleteOldReceipts);
+    
             const addNewReceipts = calculations.detailedRows.map(row => {
                  let sourceNumber = '';
                 if (row.inputType === 'Recibo') sourceNumber = availableReceipts.find(s => s.id === row.sourceId)?.recibo || '';
                 if (row.inputType === 'Viñeta') sourceNumber = availableVignettes.find(s => s.id === row.sourceId)?.numeroViñeta || '';
                 if (row.inputType === 'Mezcla') sourceNumber = availableMezclas.find(s => s.id === row.sourceId)?.mezclaNumber || '';
-                const newOrderReceipt: Omit<ThreshingOrderReceipt, 'id'> = { threshingOrderId: order.id, receiptId: row.sourceId, receiptNumber: sourceNumber, inputType: row.inputType, supplierName: row.supplierName, coffeeType: row.coffeeType, amountToThresh: Number(row.amountToThresh), primeras: row.primeras, catadura: row.catadura, projectedPrimerasPercent: row.projectedPrimerasPercent ? Number(row.projectedPrimerasPercent) : undefined, projectedCataduraPercent: row.projectedCataduraPercent ? Number(row.projectedCataduraPercent) : undefined };
+    
+                const newOrderReceipt: Omit<ThreshingOrderReceipt, 'id'> = {
+                    threshingOrderId: order.id, receiptId: row.sourceId, receiptNumber: sourceNumber, inputType: row.inputType, supplierName: row.supplierName, coffeeType: row.coffeeType, amountToThresh: Number(row.amountToThresh), primeras: row.primeras, catadura: row.catadura, projectedPrimerasPercent: row.projectedPrimerasPercent ? Number(row.projectedPrimerasPercent) : undefined, projectedCataduraPercent: row.projectedCataduraPercent ? Number(row.projectedCataduraPercent) : undefined
+                };
                 return api.addDocument<ThreshingOrderReceipt>('threshingOrderReceipts', newOrderReceipt);
             });
             await Promise.all(addNewReceipts);
 
-            await api.updateDocument<ThreshingOrder>('threshingOrders', order.id, {
-                clientId, clientName: clients.find(c => c.id === clientId)?.name || '', description, lote, tipoPreparacion, pesoVendido: parseFloat(pesoVendido) || 0, totalToThresh: calculations.totalToThresh, totalPrimeras: calculations.totalPrimeras, totalCatadura: calculations.totalCatadura, tipoCafe,
+            const updatedOrder = await api.updateDocument<ThreshingOrder>('threshingOrders', order.id, {
+                clientId, 
+                clientName: clients.find(c => c.id === clientId)?.name || '', 
+                description, 
+                lote, 
+                tipoPreparacion, 
+                pesoVendido: parseFloat(pesoVendido) || 0, 
+                tipoCafe,
+                totalToThresh: calculations.totalToThresh,
+                totalPrimeras: calculations.totalPrimeras,
+                totalCatadura: calculations.totalCatadura,
+                isFinished,
             });
+
+            await triggerNotificationSimulation(updatedOrder);
 
             onSaveSuccess();
         } catch (error) {
             console.error("Error saving edited local sale order:", error);
-            alert("Hubo un error al guardar los cambios.");
+            addToast("Hubo un error al guardar los cambios.", "error");
         } finally {
             setIsSaving(false);
         }
@@ -301,7 +349,7 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
 
     return (
         <div className="space-y-6">
-             <button onClick={onCancel} className="text-sm font-medium text-green-600 hover:underline">&larr; Volver a Ventas Locales</button>
+            <button onClick={onCancel} className="text-sm font-medium text-green-600 hover:underline">&larr; Volver a Ventas Locales</button>
             <h2 className="text-2xl font-bold text-foreground">Editar Orden de Trilla para Venta Local: {order.orderNumber}</h2>
             
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
@@ -345,7 +393,7 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
             </div>
 
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                 <h3 className="text-lg font-semibold text-purple-600 dark:text-purple-400 mb-4 border-b pb-2">Asignar Insumos para la Trilla</h3>
+                 <h3 className="text-lg font-semibold text-purple-600 dark:text-purple-400 mb-4 border-b pb-2">Asignar Insumos para la Trilla (Opcional)</h3>
                  <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                          <thead className="text-left text-muted-foreground whitespace-nowrap"><tr>
@@ -382,8 +430,8 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                                         <td className="p-2 align-top"><input type="number" value={row.amountToThresh} onChange={e => handleRowChange(row.id, 'amountToThresh', e.target.value)} max={maxAmount} disabled={!row.sourceId} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
                                         {row.inputType !== 'Recibo' ? (
                                             <>
-                                                <td className="p-2 align-top"><input type="number" placeholder="% 1ras" value={row.projectedPrimerasPercent || ''} onChange={e => handleRowChange(row.id, 'projectedPrimerasPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
-                                                <td className="p-2 align-top"><input type="number" placeholder="% Cata." value={row.projectedCataduraPercent || ''} onChange={e => handleRowChange(row.id, 'projectedCataduraPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                                <td className="p-2 align-top"><input type="number" placeholder="% 1ras" value={row.projectedPrimerasPercent ?? ''} onChange={e => handleRowChange(row.id, 'projectedPrimerasPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
+                                                <td className="p-2 align-top"><input type="number" placeholder="% Cata." value={row.projectedCataduraPercent ?? ''} onChange={e => handleRowChange(row.id, 'projectedCataduraPercent', e.target.value)} className="w-full p-2 border rounded-md bg-background border-input text-right" /></td>
                                             </>
                                         ) : <td colSpan={2} className="p-2 text-center text-muted-foreground text-xs align-middle">Automático</td>}
                                         <td className="p-2 align-top text-right font-medium">{row.primeras.toFixed(2)}</td>
@@ -393,7 +441,7 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                                 );
                             })}
                         </tbody>
-                        <tfoot className="font-bold bg-muted/50 text-foreground">
+                         <tfoot className="font-bold bg-muted/50 text-foreground">
                             <tr className="border-t-2 border-border">
                                 <td colSpan={7} className="p-2 text-right">Totales:</td>
                                 <td className="p-2 text-right">{calculations.totalPrimeras.toFixed(2)}</td>
@@ -408,7 +456,7 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                 </button>
             </div>
             
-             <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
+            <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
                 <h3 className="text-lg font-semibold text-foreground">Resumen de Liquidación</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-muted/50 p-4 rounded-lg">
@@ -434,6 +482,20 @@ const EditThreshingOrderFormLocal: React.FC<EditThreshingOrderFormLocalProps> = 
                         <p className={`text-4xl font-bold ${calculations.difference < -0.005 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                             {calculations.difference.toFixed(2)}
                         </p>
+                    </div>
+                </div>
+                <div className="pt-4 border-t">
+                    <div className="flex items-center justify-between p-3 rounded-lg border">
+                        <div>
+                            <p className="font-medium text-foreground">Marcar como Venta Finalizada</p>
+                            <p className="text-xs text-muted-foreground">Esto ocultará la venta de la lista principal.</p>
+                        </div>
+                        <ToggleSwitch
+                            id="isFinished"
+                            checked={isFinished}
+                            onChange={setIsFinished}
+                            disabled={!roleDetails?.permissions.ventasLocales?.canFinalize}
+                        />
                     </div>
                 </div>
             </div>

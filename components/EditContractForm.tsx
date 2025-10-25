@@ -3,11 +3,13 @@ import api from '../services/localStorageManager';
 import { Contract, Exporter, Buyer } from '../types';
 import CheckIcon from './icons/CheckIcon';
 import ToggleSwitch from './ToggleSwitch';
+import TrashIcon from './icons/TrashIcon';
 
 interface EditContractFormProps {
     contract: Contract;
     onSave: (updatedContract: Contract) => void;
     onCancel: () => void;
+    canFinalize?: boolean;
 }
 
 const marketMonths = ['Marzo', 'Mayo', 'Julio', 'Septiembre', 'Diciembre'];
@@ -31,11 +33,14 @@ const InputField: React.FC<{ label: string, id: string, type?: string, value: st
   </div>
 );
 
-const EditContractForm: React.FC<EditContractFormProps> = ({ contract, onSave, onCancel }) => {
+const EditContractForm: React.FC<EditContractFormProps> = ({ contract, onSave, onCancel, canFinalize }) => {
     const [formData, setFormData] = useState<Contract>({ ...contract, certifications: contract.certifications || []});
     const [exporters, setExporters] = useState<Exporter[]>([]);
     const [buyers, setBuyers] = useState<Buyer[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+
+    const [contractPdfFile, setContractPdfFile] = useState<{name: string, data: string} | null>(contract.contractPdf ? {name: "PDF del Contrato", data: contract.contractPdf} : null);
+    const [instructionsPdfFile, setInstructionsPdfFile] = useState<{name: string, data: string} | null>(contract.instructionsPdf ? {name: "PDF de Instrucciones", data: contract.instructionsPdf} : null);
 
     useEffect(() => {
         const fetchExportersAndBuyers = async () => {
@@ -79,6 +84,26 @@ const EditContractForm: React.FC<EditContractFormProps> = ({ contract, onSave, o
         }));
     };
     
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fileType: 'contract' | 'instructions') => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              const base64String = reader.result?.toString().split(',')[1];
+              if (base64String) {
+                  const fileData = { name: file.name, data: base64String };
+                  if (fileType === 'contract') {
+                      setContractPdfFile(fileData);
+                  } else {
+                      setInstructionsPdfFile(fileData);
+                  }
+              }
+          };
+          reader.readAsDataURL(file);
+      }
+      e.target.value = '';
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
@@ -86,6 +111,8 @@ const EditContractForm: React.FC<EditContractFormProps> = ({ contract, onSave, o
         const updatedContract = {
             ...formData,
             differential: parseFloat(String(formData.differential)),
+            contractPdf: contractPdfFile?.data,
+            instructionsPdf: instructionsPdfFile?.data,
         };
         await onSave(updatedContract);
         setIsSaving(false);
@@ -149,42 +176,69 @@ const EditContractForm: React.FC<EditContractFormProps> = ({ contract, onSave, o
                         </div>
                     </div>
                     
-                    {/* Certifications and status */}
+                     {/* Status & Documents */}
                     <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                        <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Estado y Certificaciones</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-muted-foreground mb-2">Certificaciones</label>
-                                <div className="flex flex-wrap gap-3">
-                                    {allCertifications.map(cert => {
-                                        const isSelected = formData.certifications.includes(cert);
-                                        return (
-                                            <button type="button" key={cert} onClick={() => handleCertificationToggle(cert)}
-                                                className={`flex items-center gap-2.5 pl-2 pr-4 py-1.5 rounded-full border-2 transition-colors text-sm font-semibold ${
-                                                    isSelected ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-card hover:bg-muted/50 border-border'}`}>
-                                                <span className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-500' : 'bg-muted border border-border'}`}>
-                                                    {isSelected && <CheckIcon className="w-4 h-4 text-white" />}
-                                                </span>
-                                                {cert}
-                                            </button>
-                                        )
-                                    })}
+                        <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Estado y Documentos</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                            <div className="space-y-4">
+                                <div className="p-4 rounded-lg border border-border space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-foreground">Contrato Terminado</p>
+                                            <p className="text-sm text-muted-foreground">Indica si el contrato se ha completado.</p>
+                                        </div>
+                                        <ToggleSwitch id="isFinishedEdit" checked={formData.isFinished} onChange={c => setFormData(p => ({...p, isFinished: c}))} disabled={!canFinalize} />
+                                    </div>
+                                    <div className="flex items-center justify-between pt-4 border-t">
+                                        <div>
+                                            <p className="font-medium text-foreground">Alquiler de Licencia</p>
+                                            <p className="text-sm text-muted-foreground">Activar si solo se presta la licencia.</p>
+                                        </div>
+                                        <ToggleSwitch id="isServiceContractEdit" checked={!!formData.isServiceContract} onChange={c => setFormData(p => ({...p, isServiceContract: c}))} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-muted-foreground mb-2">Certificaciones</label>
+                                    <div className="flex flex-wrap gap-3">
+                                        {allCertifications.map(cert => {
+                                            const isSelected = formData.certifications.includes(cert);
+                                            return (
+                                                <button type="button" key={cert} onClick={() => handleCertificationToggle(cert)}
+                                                    className={`flex items-center gap-2.5 pl-2 pr-4 py-1.5 rounded-full border-2 transition-colors text-sm font-semibold ${
+                                                        isSelected ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-card hover:bg-muted/50 border-border'}`}>
+                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-500' : 'bg-muted border border-border'}`}>
+                                                        {isSelected && <CheckIcon className="w-4 h-4 text-white" />}
+                                                    </span>
+                                                    {cert}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
                                 </div>
                             </div>
-                            <div className="p-4 rounded-lg border border-border space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium text-foreground">Contrato Terminado</p>
-                                        <p className="text-sm text-muted-foreground">Indica si el contrato se ha completado.</p>
-                                    </div>
-                                    <ToggleSwitch id="isFinishedEdit" checked={formData.isFinished} onChange={c => setFormData(p => ({...p, isFinished: c}))} />
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="contractPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Contrato</label>
+                                    {!contractPdfFile ? (
+                                        <input type="file" id="contractPdf" accept=".pdf" onChange={(e) => handleFileChange(e, 'contract')} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                                    ) : (
+                                        <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                                            <span className="text-sm text-foreground truncate">{contractPdfFile.name}</span>
+                                            <button type="button" onClick={() => setContractPdfFile(null)} className="p-1 text-red-500 hover:bg-red-100 rounded-full"><TrashIcon className="w-4 h-4"/></button>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="flex items-center justify-between pt-4 border-t">
-                                    <div>
-                                        <p className="font-medium text-foreground">Alquiler de Licencia</p>
-                                        <p className="text-sm text-muted-foreground">Activar si solo se presta la licencia.</p>
-                                    </div>
-                                    <ToggleSwitch id="isServiceContractEdit" checked={!!formData.isServiceContract} onChange={c => setFormData(p => ({...p, isServiceContract: c}))} />
+                                <div>
+                                    <label htmlFor="instructionsPdf" className="block text-sm font-medium text-muted-foreground mb-1">PDF Instrucciones</label>
+                                    {!instructionsPdfFile ? (
+                                        <input type="file" id="instructionsPdf" accept=".pdf" onChange={(e) => handleFileChange(e, 'instructions')} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-900/50 dark:file:text-green-300 dark:hover:file:bg-green-900"/>
+                                    ) : (
+                                        <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                                            <span className="text-sm text-foreground truncate">{instructionsPdfFile.name}</span>
+                                            <button type="button" onClick={() => setInstructionsPdfFile(null)} className="p-1 text-red-500 hover:bg-red-100 rounded-full"><TrashIcon className="w-4 h-4"/></button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

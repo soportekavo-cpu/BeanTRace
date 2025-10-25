@@ -34,7 +34,10 @@ const RendimientoDetailModal: React.FC<RendimientoDetailModalProps> = ({ rendimi
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose}>
             <div className="bg-card p-6 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 pb-4 border-b">
-                    <h3 className="text-xl font-bold text-blue-600">Detalle de Rendimiento</h3>
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-xl font-bold text-blue-600">Detalle de Rendimiento: {rendimiento.rendimientoNumber}</h3>
+                        {rendimiento.isFinalizado && <span className="px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">FINALIZADO</span>}
+                    </div>
                      <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-2xl leading-none">&times;</button>
                 </div>
 
@@ -94,6 +97,12 @@ const RendimientoDetailModal: React.FC<RendimientoDetailModalProps> = ({ rendimi
                             </tbody>
                         </table>
                     </div>
+                    {rendimiento.notes && (
+                        <div className="mt-6">
+                            <h4 className="text-lg font-semibold text-foreground mb-2">Notas</h4>
+                            <p className="text-sm p-3 bg-muted/50 rounded-md border whitespace-pre-wrap">{rendimiento.notes}</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-shrink-0 flex justify-end gap-4 mt-6 pt-4 border-t">

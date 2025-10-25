@@ -1,9 +1,24 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso } from '../types';
+import { Contract, ContractLot, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso, NotificationSetting } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import CheckIcon from './icons/CheckIcon';
+import { useToast } from '../hooks/useToast';
 
 interface EditThreshingOrderFormProps {
     order: ThreshingOrder;
@@ -32,6 +47,7 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const { addToast } = useToast();
     
     const [inputRows, setInputRows] = useState<InputRow[]>([]);
     const [originalReceipts, setOriginalReceipts] = useState<ThreshingOrderReceipt[]>([]);
@@ -148,16 +164,32 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                 updatedRow.sourceId = value as string;
                 let maxAmount = 0;
                 const originalAmount = originalReceipts.find(or => or.receiptId === value)?.amountToThresh || 0;
-                if(updatedRow.inputType === 'Recibo') maxAmount = (availableReceipts.find(r => r.id === value)?.enBodega || 0) + originalAmount;
-                if(updatedRow.inputType === 'Viñeta') maxAmount = (availableVignettes.find(v => v.id === value)?.pesoNeto || 0) + originalAmount;
-                if(updatedRow.inputType === 'Mezcla') maxAmount = (availableMezclas.find(m => m.id === value)?.sobranteEnBodega || 0) + originalAmount;
+                
+                if(updatedRow.inputType === 'Recibo') {
+                    const enBodega = availableReceipts.find(r => r.id === value)?.enBodega;
+                    maxAmount = (Number(enBodega) || 0) + originalAmount;
+                } else if(updatedRow.inputType === 'Viñeta') {
+                    const pesoNeto = availableVignettes.find(v => v.id === value)?.pesoNeto;
+                    maxAmount = (Number(pesoNeto) || 0) + originalAmount;
+                } else if(updatedRow.inputType === 'Mezcla') {
+                    const sobrante = availableMezclas.find(m => m.id === value)?.sobranteEnBodega;
+                    maxAmount = (Number(sobrante) || 0) + originalAmount;
+                }
                 updatedRow.amountToThresh = maxAmount;
             } else if (field === 'amountToThresh') {
                 let maxAmount = 0;
                 const originalAmount = originalReceipts.find(or => or.receiptId === row.sourceId)?.amountToThresh || 0;
-                if(row.inputType === 'Recibo') maxAmount = (availableReceipts.find(r => r.id === row.sourceId)?.enBodega || 0) + originalAmount;
-                if(row.inputType === 'Viñeta') maxAmount = (availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto || 0) + originalAmount;
-                if(row.inputType === 'Mezcla') maxAmount = (availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega || 0) + originalAmount;
+                
+                if(row.inputType === 'Recibo') {
+                    const enBodega = availableReceipts.find(r => r.id === row.sourceId)?.enBodega;
+                    maxAmount = (Number(enBodega) || 0) + originalAmount;
+                } else if(row.inputType === 'Viñeta') {
+                    const pesoNeto = availableVignettes.find(v => v.id === row.sourceId)?.pesoNeto;
+                    maxAmount = (Number(pesoNeto) || 0) + originalAmount;
+                } else if(row.inputType === 'Mezcla') {
+                    const sobrante = availableMezclas.find(m => m.id === row.sourceId)?.sobranteEnBodega;
+                    maxAmount = (Number(sobrante) || 0) + originalAmount;
+                }
                 
                 const newAmount = Number(value);
                 updatedRow.amountToThresh = newAmount > maxAmount ? maxAmount : newAmount;
@@ -192,10 +224,8 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
             if (row.inputType === 'Recibo') {
                 const receipt = availableReceipts.find(r => r.id === row.sourceId);
                 if (receipt) {
-                    // FIX: Explicitly cast to Number to avoid potential type errors with arithmetic operations.
-                    primeras = amount * (Number(receipt.rendimientoPrimera) / 100);
-                    // FIX: Explicitly cast to Number to avoid potential type errors with arithmetic operations.
-                    catadura = amount * (Number(receipt.rendimientoRechazo) / 100);
+                    primeras = amount * ((Number(receipt.rendimientoPrimera) || 0) / 100);
+                    catadura = amount * ((Number(receipt.rendimientoRechazo) || 0) / 100);
                     sourceInfo = {
                         supplierName: suppliers.find(s => s.id === receipt.proveedorId)?.name || 'N/A',
                         coffeeType: receipt.tipo === 'Otro' ? receipt.customTipo : receipt.tipo
@@ -228,9 +258,20 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
         return { neededPrimeras, totalToThresh, totalPrimeras, totalCatadura, difference, detailedRows };
     }, [selectedLotIds, inputRows, availableReceipts, availableVignettes, availableMezclas, contractLots, suppliers]);
 
+    const triggerNotificationSimulation = async (order: ThreshingOrder) => {
+        try {
+            const settings = await api.getCollection<NotificationSetting>('notifications', s => s.event === 'update-threshing-order');
+            if (settings.length > 0 && settings[0].emails) {
+                addToast(`Simulación de Notificación: Correo enviado a ${settings[0].emails} por la actualización de la orden ${order.orderNumber}.`, 'info');
+            }
+        } catch (error) {
+            console.error("Failed to check for notification settings:", error);
+        }
+    };
+
     const handleSave = async () => {
         if (selectedLotIds.size === 0 || inputRows.some(row => !row.sourceId || Number(row.amountToThresh) <= 0)) {
-            alert('Por favor, selecciona partidas y asegúrate de que todos los insumos tengan una fuente y una cantidad mayor a cero.');
+            addToast('Por favor, selecciona partidas y asegúrate de que todos los insumos tengan una fuente y una cantidad mayor a cero.', 'error');
             return;
         }
         setIsSaving(true);
@@ -261,7 +302,10 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                 if (change.type === 'Recibo') {
                     const receipt = allReceipts.find(r => r.id === sourceId);
                     if (receipt) {
+                        // FIX: Ensure operands are numbers before arithmetic operations.
                         updatePromises.push(api.updateDocument<PurchaseReceipt>('purchaseReceipts', sourceId, {
+// @FIX: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+// Ensured operands are numbers before arithmetic operations to prevent potential runtime errors.
                             enBodega: (Number(receipt.enBodega) || 0) + change.delta,
                             trillado: (Number(receipt.trillado) || 0) - change.delta
                         }));
@@ -269,6 +313,7 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                 } else if (change.type === 'Mezcla') {
                     const mezcla = allMezclas.find(m => m.id === sourceId);
                     if (mezcla) {
+                        // FIX: Ensure operands are numbers before arithmetic operations.
                         const newSobrante = (Number(mezcla.sobranteEnBodega) || 0) + change.delta;
                         const newDespachado = (Number(mezcla.cantidadDespachada) || 0) - change.delta;
                         const newStatus: Mezcla['status'] = newSobrante <= 0.005 ? 'Agotado' : (newDespachado > 0.005 ? 'Despachado Parcialmente' : 'Activo');
@@ -294,7 +339,7 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
                         const updatedVignettes = (parentDoc[vignetteArrayKey] as Viñeta[]).map(v => {
                             if (v.id === sourceId) {
                                 const newPesoNeto = v.pesoNeto + change.delta;
-                                const newStatus: Viñeta['status'] = newPesoNeto <= 0.005 ? 'Utilizada en Trilla' : (Math.abs(newPesoNeto - v.originalPesoNeto) < 0.005 ? 'En Bodega' : 'Mezclada Parcialmente');
+                                const newStatus: Viñeta['status'] = newPesoNeto <= 0.005 ? 'Utilizada en Trilla' : (Math.abs(newPesoNeto - (v.originalPesoNeto || 0)) < 0.005 ? 'En Bodega' : 'Mezclada Parcialmente');
                                 return { ...v, pesoNeto: newPesoNeto, status: newStatus };
                             }
                             return v;
@@ -321,22 +366,25 @@ const EditThreshingOrderForm: React.FC<EditThreshingOrderFormProps> = ({ order, 
             });
             await Promise.all(addNewReceipts);
 
-            await api.updateDocument<ThreshingOrder>('threshingOrders', order.id, {
+            const updatedOrder = await api.updateDocument<ThreshingOrder>('threshingOrders', order.id, {
                 lotIds: Array.from(selectedLotIds),
                 totalToThresh: calculations.totalToThresh,
                 totalPrimeras: calculations.totalPrimeras,
                 totalCatadura: calculations.totalCatadura,
             });
+            await triggerNotificationSimulation(updatedOrder);
 
             onSaveSuccess();
         } catch (error) {
             console.error("Error saving edited threshing order:", error);
-            alert("Hubo un error al guardar los cambios.");
+            addToast("Hubo un error al guardar los cambios.", "error");
         } finally {
             setIsSaving(false);
         }
     };
     
+    if (loading) return <div>Cargando...</div>;
+
     return (
         <div className="space-y-6">
              <button onClick={onCancel} className="text-sm font-medium text-green-600 hover:underline">

@@ -6,6 +6,8 @@ import TrashIcon from './icons/TrashIcon';
 import SelectVignettesModal from './SelectVignettesModal';
 import { printComponent } from '../utils/printUtils';
 import ReprocesoPDF from './ReprocesoPDF';
+import { useAuth } from '../contexts/AuthContext';
+import ToggleSwitch from './ToggleSwitch';
 
 interface ReprocesoFormProps {
     existingReproceso?: Reproceso | null;
@@ -14,6 +16,11 @@ interface ReprocesoFormProps {
 }
 
 const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCancel, onSaveSuccess }) => {
+    const { roleDetails } = useAuth();
+    const permissions = roleDetails?.permissions.reprocesos;
+    const canEditEntrada = permissions?.editEntrada === true;
+    const canEditSalida = permissions?.editSalida === true;
+
     const isEditMode = !!existingReproceso;
     const [byproductTypes, setByproductTypes] = useState<ByproductType[]>([]);
     const [loading, setLoading] = useState(true);
@@ -25,6 +32,7 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
         existingReproceso?.outputVignettes.length ? existingReproceso.outputVignettes : [{ id: `new_${Date.now()}`, numeroViñeta: '', tipo: '', pesoNeto: undefined }]
     );
     const [notes, setNotes] = useState(existingReproceso?.notes || '');
+    const [isFinalizado, setIsFinalizado] = useState(existingReproceso?.isFinalizado || false);
     const [hasChanged, setHasChanged] = useState(false);
     const [projections, setProjections] = useState<Record<string, { prim: string; cata: string }>>({});
     
@@ -94,7 +102,7 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
         const outputSummary = outputVignettes.reduce((acc, v) => {
             const peso = Number(v.pesoNeto) || 0;
             acc.totalWeight += peso;
-            if (v.tipo === 'Primeras') {
+            if (v.tipo?.toLowerCase().includes('primeras')) {
                 acc.totalPrimeras += peso;
             } else if (v.tipo) {
                 acc.totalCatadura += peso;
@@ -325,6 +333,7 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
                     totalOutputWeight: realTotals.totalWeight,
                     merma: realTotals.merma,
                     notes,
+                    isFinalizado,
                     inputVignetteProjections: finalProjections,
                     totalProyectadoPrimeras: projectedTotals.totalPrimeras,
                     totalProyectadoCatadura: projectedTotals.totalCatadura,
@@ -365,6 +374,7 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
                     merma: realTotals.merma,
                     notes,
                     status: 'Activo',
+                    isFinalizado,
                     inputVignetteProjections: finalProjections,
                     totalProyectadoPrimeras: projectedTotals.totalPrimeras,
                     totalProyectadoCatadura: projectedTotals.totalCatadura,
@@ -386,7 +396,7 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
         }
     };
     
-    const canSave = Object.keys(vignetteErrors).length === 0 && inputVignettes.length > 0 && !isSaving;
+    const canSave = Object.keys(vignetteErrors).length === 0 && inputVignettes.length > 0 && !isSaving && (canEditEntrada || canEditSalida);
 
     return (
         <div className="space-y-6">
@@ -395,7 +405,7 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
 
             <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-blue-600 mb-4">1. Viñetas de Entrada y Proyección de Rendimiento</h3>
-                <button type="button" onClick={() => setShowVignetteSelector(true)} className="mb-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                <button type="button" onClick={() => setShowVignetteSelector(true)} disabled={!canEditEntrada} className="mb-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed">
                     {isEditMode ? 'Editar Viñetas de Entrada' : 'Seleccionar Viñetas del Inventario'}
                 </button>
                 {inputVignettes.length > 0 && (
@@ -422,8 +432,8 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
                                             <td className="p-2 font-semibold text-red-500">{v.numeroViñeta}</td>
                                             <td className="p-2">{v.tipo}</td>
                                             <td className="p-2 text-right">{v.pesoNeto.toFixed(2)}</td>
-                                            <td className="p-2 w-28"><input type="number" value={proj.prim} onChange={e => handleProjectionChange(v.id, 'prim', e.target.value)} className="w-full p-1 border rounded-md bg-background border-input text-right" /></td>
-                                            <td className="p-2 w-28"><input type="number" value={proj.cata} onChange={e => handleProjectionChange(v.id, 'cata', e.target.value)} className="w-full p-1 border rounded-md bg-background border-input text-right" /></td>
+                                            <td className="p-2 w-28"><input type="number" value={proj.prim} onChange={e => handleProjectionChange(v.id, 'prim', e.target.value)} disabled={!canEditEntrada} className="w-full p-1 border rounded-md bg-background border-input text-right disabled:bg-muted/50" /></td>
+                                            <td className="p-2 w-28"><input type="number" value={proj.cata} onChange={e => handleProjectionChange(v.id, 'cata', e.target.value)} disabled={!canEditEntrada} className="w-full p-1 border rounded-md bg-background border-input text-right disabled:bg-muted/50" /></td>
                                             <td className="p-2 text-right font-medium">{primProyectado.toFixed(2)}</td>
                                             <td className="p-2 text-right font-medium">{cataProyectado.toFixed(2)}</td>
                                         </tr>
@@ -452,36 +462,53 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
                         {outputVignettes.map(v => (
                             <tr key={v.id}>
                                 <td className="p-1 align-top">
-                                    <input type="text" value={v.numeroViñeta} onChange={e => handleOutputVignetteChange(v.id!, 'numeroViñeta', e.target.value)} 
-                                    className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('viñeta') ? 'border-red-500' : 'border-input'}`} />
+                                    <input type="text" value={v.numeroViñeta} onChange={e => handleOutputVignetteChange(v.id!, 'numeroViñeta', e.target.value)} disabled={!canEditSalida}
+                                    className={`w-full p-2 border rounded-md bg-background disabled:bg-muted/50 ${vignetteErrors[v.id!]?.includes('viñeta') ? 'border-red-500' : 'border-input'}`} />
                                     {vignetteErrors[v.id!]?.includes('viñeta') && <p className="text-xs text-red-500 mt-1">{vignetteErrors[v.id!]}</p>}
                                 </td>
                                 <td className="p-1 align-top">
-                                    <select value={v.tipo} onChange={e => handleOutputVignetteChange(v.id!, 'tipo', e.target.value)} 
-                                    className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('tipo') ? 'border-red-500' : 'border-input'}`}>
+                                    <select value={v.tipo} onChange={e => handleOutputVignetteChange(v.id!, 'tipo', e.target.value)} disabled={!canEditSalida}
+                                    className={`w-full p-2 border rounded-md bg-background disabled:bg-muted/50 ${vignetteErrors[v.id!]?.includes('tipo') ? 'border-red-500' : 'border-input'}`}>
                                         <option value="">Seleccionar...</option>{byproductTypes.map(t => <option key={t.id} value={t.tipo}>{t.tipo}</option>)}
                                     </select>
                                 </td>
                                 <td className="p-1 align-top">
-                                    <input type="number" value={v.pesoNeto === undefined ? '' : v.pesoNeto} onChange={e => handleOutputVignetteChange(v.id!, 'pesoNeto', e.target.value)} 
-                                    className={`w-full p-2 border rounded-md bg-background ${vignetteErrors[v.id!]?.includes('peso') ? 'border-red-500' : 'border-input'}`} />
+                                    <input type="number" value={v.pesoNeto === undefined ? '' : v.pesoNeto} onChange={e => handleOutputVignetteChange(v.id!, 'pesoNeto', e.target.value)} disabled={!canEditSalida}
+                                    className={`w-full p-2 border rounded-md bg-background disabled:bg-muted/50 ${vignetteErrors[v.id!]?.includes('peso') ? 'border-red-500' : 'border-input'}`} />
                                 </td>
-                                <td className="p-1 align-top"><button onClick={() => removeOutputRow(v.id!)} className="text-red-500 mt-2"><TrashIcon className="w-4 h-4"/></button></td>
+                                <td className="p-1 align-top"><button onClick={() => removeOutputRow(v.id!)} disabled={!canEditSalida} className="text-red-500 mt-2 disabled:text-gray-400"><TrashIcon className="w-4 h-4"/></button></td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-                <button onClick={addOutputRow} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md"><PlusIcon className="w-4 h-4" /> Agregar Viñeta</button>
+                <button onClick={addOutputRow} disabled={!canEditSalida} className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"><PlusIcon className="w-4 h-4" /> Agregar Viñeta</button>
             </div>
 
             <div className="bg-card border-2 border-green-500/50 rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-teal-600 mb-4">3. Resumen y Comparación del Proceso</h3>
+                <h3 className="text-lg font-semibold text-teal-600 mb-4">3. Resumen, Finalización y Notas</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                         <h4 className="font-semibold mb-2 text-foreground">Resumen de Totales</h4>
-                         <p className="flex justify-between font-bold border-b pb-2"><span>Total Entrada:</span> <span>{realTotals.totalInputWeight.toFixed(2)} qqs.</span></p>
-                         <p className="flex justify-between text-sm"><span>Total Salida:</span> <strong>{realTotals.totalWeight.toFixed(2)} qqs.</strong></p>
-                         <p className={`flex justify-between text-sm font-bold ${realTotals.merma > 0.005 ? 'text-red-500' : 'text-green-600'}`}><span>Merma:</span> <span>{realTotals.merma.toFixed(2)} qqs.</span></p>
+                     <div className="space-y-4">
+                         <div className={`p-4 rounded-lg text-center ${realTotals.merma > 0.005 ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
+                            <p className={`text-sm font-semibold ${realTotals.merma > 0.005 ? 'text-red-800' : 'text-green-800'}`}>Merma (Diferencia)</p>
+                            <p className={`text-4xl font-bold ${realTotals.merma > 0.005 ? 'text-red-600' : 'text-green-600'}`}>{realTotals.merma.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">Total Entrada: {realTotals.totalInputWeight.toFixed(2)} qqs.</p>
+                        </div>
+                         <div>
+                             <label htmlFor="notes" className="block text-sm font-medium text-muted-foreground mb-1">Notas</label>
+                             <textarea id="notes" value={notes} onChange={(e) => { setNotes(e.target.value); setHasChanged(true); }} disabled={!canEditEntrada && !canEditSalida} rows={4} className="w-full p-2 border rounded-md bg-background border-input disabled:bg-muted/50" />
+                         </div>
+                         <div className="flex items-center justify-between p-3 rounded-lg border">
+                            <div>
+                                 <p className="font-medium text-foreground">Marcar como Finalizado</p>
+                                 <p className="text-xs text-muted-foreground">Bloquea la edición para no-administradores.</p>
+                             </div>
+                             <ToggleSwitch
+                                 id="isFinalizado"
+                                 checked={isFinalizado}
+                                 onChange={setIsFinalizado}
+                                 disabled={!roleDetails?.permissions.reprocesos?.canFinalize}
+                             />
+                         </div>
                     </div>
                      <div className="bg-muted/50 rounded-lg p-4">
                         <h4 className="font-semibold mb-2 text-foreground">Comparación de Rendimiento</h4>
@@ -489,28 +516,24 @@ const ReprocesoForm: React.FC<ReprocesoFormProps> = ({ existingReproceso, onCanc
                             <thead><tr className="font-bold"><td className="pb-1">Concepto</td><td className="pb-1 text-right">Proyectado</td><td className="pb-1 text-right">Real</td><td className="pb-1 text-right">Diferencia</td></tr></thead>
                             <tbody>
                                 <tr className="border-t"><td className="pt-2 font-semibold">Primeras</td>
-                                    <td className="pt-2 text-right">{projectedTotals.totalPrimeras.toFixed(2)}</td>
-                                    <td className="pt-2 text-right">{realTotals.totalPrimeras.toFixed(2)}</td>
-                                    <td className={`pt-2 text-right font-bold ${realTotals.totalPrimeras - projectedTotals.totalPrimeras < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{(realTotals.totalPrimeras - projectedTotals.totalPrimeras).toFixed(2)}</td>
+                                    <td className="pt-2 text-right text-xl font-bold">{projectedTotals.totalPrimeras.toFixed(2)}</td>
+                                    <td className="pt-2 text-right text-xl font-bold">{realTotals.totalPrimeras.toFixed(2)}</td>
+                                    <td className={`pt-2 text-right text-xl font-bold ${(realTotals.totalPrimeras || 0) - projectedTotals.totalPrimeras < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{((realTotals.totalPrimeras || 0) - projectedTotals.totalPrimeras).toFixed(2)}</td>
                                 </tr>
                                 <tr><td className="pb-2 font-semibold">Catadura</td>
-                                    <td className="pb-2 text-right">{projectedTotals.totalCatadura.toFixed(2)}</td>
-                                    <td className="pb-2 text-right">{realTotals.totalCatadura.toFixed(2)}</td>
-                                    <td className={`pb-2 text-right font-bold ${realTotals.totalCatadura - projectedTotals.totalCatadura < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{(realTotals.totalCatadura - projectedTotals.totalCatadura).toFixed(2)}</td>
+                                    <td className="pb-2 text-right text-xl font-bold">{(projectedTotals.totalCatadura || 0).toFixed(2)}</td>
+                                    <td className="pb-2 text-right text-xl font-bold">{(realTotals.totalCatadura || 0).toFixed(2)}</td>
+                                    <td className={`pb-2 text-right text-xl font-bold ${(realTotals.totalCatadura || 0) - (projectedTotals.totalCatadura || 0) < -0.005 ? 'text-red-500' : 'text-green-600'}`}>{((realTotals.totalCatadura || 0) - (projectedTotals.totalCatadura || 0)).toFixed(2)}</td>
                                 </tr>
                                 <tr className="font-bold border-t">
-                                    <td className="pt-2">Total</td>
-                                    <td className="pt-2 text-right">{(projectedTotals.totalPrimeras + projectedTotals.totalCatadura).toFixed(2)}</td>
-                                    <td className="pt-2 text-right">{realTotals.totalWeight.toFixed(2)}</td>
-                                    <td className="pt-2 text-right">{(realTotals.totalWeight - (projectedTotals.totalPrimeras + projectedTotals.totalCatadura)).toFixed(2)}</td>
+                                    <td className="pt-2">Total Salida</td>
+                                    <td className="pt-2 text-right text-xl">{((projectedTotals.totalPrimeras || 0) + (projectedTotals.totalCatadura || 0)).toFixed(2)}</td>
+                                    <td className="pt-2 text-right text-xl">{realTotals.totalWeight.toFixed(2)}</td>
+                                    <td className="pt-2 text-right text-xl">{(realTotals.totalWeight - ((projectedTotals.totalPrimeras || 0) + (projectedTotals.totalCatadura || 0))).toFixed(2)}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                </div>
-                <div className="mt-4">
-                     <label htmlFor="notes" className="block text-sm font-medium text-muted-foreground mb-1">Notas adicionales sobre el reproceso...</label>
-                     <textarea id="notes" value={notes} onChange={(e) => { setNotes(e.target.value); setHasChanged(true); }} rows={3} className="w-full p-2 border rounded-md bg-background border-input" />
                 </div>
             </div>
 

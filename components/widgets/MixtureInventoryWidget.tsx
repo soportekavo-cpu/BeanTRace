@@ -8,7 +8,7 @@ const MixtureInventoryWidget: React.FC<{ data: DashboardData; onWidgetClick: (ty
     const chartData = useMemo(() => {
         const inventoryMap: Record<string, number> = {};
         data.mezclas.forEach(mezcla => {
-            if (mezcla.status === 'Activo' && mezcla.sobranteEnBodega > 0.005) {
+            if ((mezcla.status === 'Activo' || mezcla.status === 'Despachado Parcialmente') && mezcla.sobranteEnBodega > 0.005) {
                 inventoryMap[mezcla.tipoMezcla] = (inventoryMap[mezcla.tipoMezcla] || 0) + mezcla.sobranteEnBodega;
             }
         });

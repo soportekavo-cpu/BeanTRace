@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/localStorageManager';
-import { Client, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso } from '../types';
+import { Client, PurchaseReceipt, Supplier, ThreshingOrder, ThreshingOrderReceipt, Viñeta, Mezcla, Rendimiento, Reproceso, NotificationSetting } from '../types';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import { printComponent } from '../utils/printUtils';
 import ThreshingOrderPDF from './ThreshingOrderPDF';
+import { useToast } from '../hooks/useToast';
 
 interface ThreshingOrderFormLocalProps {
     onCancel: () => void;
@@ -27,6 +28,7 @@ const ThreshingOrderFormLocal: React.FC<ThreshingOrderFormLocalProps> = ({ onCan
     const [lote, setLote] = useState('');
     const [tipoPreparacion, setTipoPreparacion] = useState('');
     const [pesoVendido, setPesoVendido] = useState('');
+    const { addToast } = useToast();
 
     const [availableReceipts, setAvailableReceipts] = useState<PurchaseReceipt[]>([]);
     const [availableVignettes, setAvailableVignettes] = useState<Viñeta[]>([]);
@@ -182,9 +184,20 @@ const ThreshingOrderFormLocal: React.FC<ThreshingOrderFormLocalProps> = ({ onCan
         return { totalToThresh, totalPrimeras, totalCatadura, difference, detailedRows };
     }, [inputRows, availableReceipts, availableVignettes, availableMezclas, suppliers, pesoVendido]);
 
+    const triggerNotificationSimulation = async (order: ThreshingOrder) => {
+        try {
+            const settings = await api.getCollection<NotificationSetting>('notifications', s => s.event === 'new-threshing-order');
+            if (settings.length > 0 && settings[0].emails) {
+                addToast(`Simulación de Notificación: Correo enviado a ${settings[0].emails} por la nueva venta local ${order.orderNumber}.`, 'info');
+            }
+        } catch (error) {
+            console.error("Failed to check for notification settings:", error);
+        }
+    };
+
     const handleSave = async () => {
         if (!clientId) {
-            alert('Por favor, selecciona un cliente para guardar la orden.');
+            addToast('Por favor, selecciona un cliente para guardar la orden.', 'error');
             return;
         }
 
@@ -199,6 +212,7 @@ const ThreshingOrderFormLocal: React.FC<ThreshingOrderFormLocalProps> = ({ onCan
                 contractId: null, orderNumber, creationDate: new Date().toISOString().split('T')[0], lotIds: [], notes: '', totalToThresh: calculations.totalToThresh, totalPrimeras: calculations.totalPrimeras, totalCatadura: calculations.totalCatadura, orderType: 'Venta Local', clientId, clientName: clients.find(c => c.id === clientId)?.name || '', description, lote, tipoPreparacion, pesoVendido: parseFloat(pesoVendido) || 0, tipoCafe
             };
             const newOrder = await api.addDocument<ThreshingOrder>('threshingOrders', newOrderData);
+            await triggerNotificationSimulation(newOrder);
 
             const orderReceiptsForPdf: ThreshingOrderReceipt[] = [];
             
@@ -278,7 +292,7 @@ const ThreshingOrderFormLocal: React.FC<ThreshingOrderFormLocalProps> = ({ onCan
 
         } catch (error) {
             console.error("Error saving local sale order:", error);
-            alert("Hubo un error al guardar la orden.");
+            addToast("Hubo un error al guardar la orden.", "error");
         } finally {
             setIsSaving(false);
         }

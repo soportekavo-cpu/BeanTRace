@@ -1,5 +1,7 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Log, AppUser } from '../types';
 
 const formatDate = (isoString: string) => {
@@ -55,8 +57,8 @@ const LogsTab: React.FC = () => {
                 fetchLogs();
             }
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
     
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {

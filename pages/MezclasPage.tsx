@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import api, { addDataChangeListener, removeDataChangeListener } from '../services/localStorageManager';
+import api from '../services/localStorageManager';
 import { Mezcla, Viñeta, Rendimiento, Reproceso, ThreshingOrderReceipt, Salida } from '../types';
 import PlusIcon from '../components/icons/PlusIcon';
 import EyeIcon from '../components/icons/EyeIcon';
@@ -11,7 +12,8 @@ import MezclaPDF from '../components/MezclaPDF';
 import PencilIcon from '../components/icons/PencilIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import ToggleSwitch from '../components/ToggleSwitch';
-
+import { useToast } from '../hooks/useToast';
+import { useHighlight } from '../contexts/HighlightContext';
 
 const formatDate = (dateString: string) => {
     if (!dateString || !dateString.includes('-')) return '';
@@ -44,6 +46,8 @@ const MezclasPage: React.FC = () => {
     const [mezclaToView, setMezclaToView] = useState<Mezcla | null>(null);
     const [mezclaToDelete, setMezclaToDelete] = useState<Mezcla | null>(null);
     const [showOnlyInStock, setShowOnlyInStock] = useState(true);
+    const { addToast } = useToast();
+    const { targetId, clearHighlight } = useHighlight();
 
     const fetchData = async () => {
         setLoading(true);
@@ -68,9 +72,25 @@ const MezclasPage: React.FC = () => {
         const handleDataChange = (event: Event) => {
             fetchData();
         };
-        addDataChangeListener(handleDataChange);
-        return () => removeDataChangeListener(handleDataChange);
+        api.addDataChangeListener(handleDataChange);
+        return () => api.removeDataChangeListener(handleDataChange);
     }, []);
+
+    useEffect(() => {
+        if (targetId) {
+            const element = document.querySelector(`[data-id="${targetId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-row');
+                setTimeout(() => {
+                    element.classList.remove('highlight-row');
+                    clearHighlight();
+                }, 4500);
+            } else {
+                clearHighlight();
+            }
+        }
+    }, [targetId, mezclas, loading]);
 
     const handleSaveSuccess = async () => {
         setView('list');
@@ -106,62 +126,54 @@ const MezclasPage: React.FC = () => {
               let usedIn = [];
               if (isUsedInThreshing) usedIn.push("órdenes de trilla");
               if (isUsedInSalida) usedIn.push("salidas");
-              alert(`No se puede eliminar la mezcla '${mezclaToDelete.mezclaNumber}' porque está siendo utilizada en ${usedIn.join(' y ')}. Anule los procesos posteriores primero.`);
+              addToast(`No se puede eliminar la mezcla '${mezclaToDelete.mezclaNumber}' porque está siendo utilizada en ${usedIn.join(' y ')}. Anule los procesos posteriores primero.`, 'error');
               setMezclaToDelete(null);
               return;
             }
 
             // Proceed with deletion if not locked
+            const updatePromises: Promise<any>[] = [];
             const allRendimientos = await api.getCollection<Rendimiento>('rendimientos');
             const allReprocesos = await api.getCollection<Reproceso>('reprocesos');
-            const docsToUpdate = new Map<string, { type: 'Rendimiento' | 'Reproceso', doc: any }>();
-
-            const findAndPrepareUpdate = (
-                vignetteId: string, 
-                pesoUtilizado: number,
-                sourceArray: any[], 
-                docType: 'Rendimiento' | 'Reproceso',
-                vignetteArrayKey: 'vignettes' | 'outputVignettes'
-            ) => {
-                for (const doc of sourceArray) {
-                    const vignetteIndex = doc[vignetteArrayKey].findIndex((v: Viñeta) => v.id === vignetteId);
-                    if (vignetteIndex > -1) {
-                        const updatedDoc = docsToUpdate.get(doc.id)?.doc || JSON.parse(JSON.stringify(doc));
-                        const vignette = updatedDoc[vignetteArrayKey][vignetteIndex];
-                        
-                        const newPesoNeto = (vignette.pesoNeto || 0) + pesoUtilizado;
-                        vignette.pesoNeto = newPesoNeto;
-
-                        if (Math.abs(newPesoNeto - vignette.originalPesoNeto) < 0.005) {
-                            vignette.status = 'En Bodega';
-                        } else {
-                            vignette.status = 'Mezclada Parcialmente';
-                        }
-
-                        docsToUpdate.set(doc.id, { type: docType, doc: updatedDoc });
-                        return true;
-                    }
-                }
-                return false;
-            };
 
             for (const usedVignette of mezclaToDelete.inputVignettesData) {
-                let found = findAndPrepareUpdate(usedVignette.vignetteId, usedVignette.pesoUtilizado, allRendimientos, 'Rendimiento', 'vignettes');
-                if (!found) {
-                    findAndPrepareUpdate(usedVignette.vignetteId, usedVignette.pesoUtilizado, allReprocesos, 'Reproceso', 'outputVignettes');
+                const { vignetteId, pesoUtilizado } = usedVignette;
+
+                let parentDoc: Rendimiento | Reproceso | undefined;
+                let collectionName: 'rendimientos' | 'reprocesos' | undefined;
+                let vignetteArrayKey: 'vignettes' | 'outputVignettes' | undefined;
+
+                parentDoc = allRendimientos.find(r => r.vignettes.some(v => v.id === vignetteId));
+                if (parentDoc) {
+                    collectionName = 'rendimientos';
+                    vignetteArrayKey = 'vignettes';
+                } else {
+                    parentDoc = allReprocesos.find(r => r.outputVignettes.some(v => v.id === vignetteId));
+                    if (parentDoc) {
+                        collectionName = 'reprocesos';
+                        vignetteArrayKey = 'outputVignettes';
+                    }
+                }
+
+                if (parentDoc && collectionName && vignetteArrayKey) {
+                    const updatedVignettes = (parentDoc[vignetteArrayKey] as Viñeta[]).map(v => {
+                        if (v.id === vignetteId) {
+                            const newPesoNeto = (Number(v.pesoNeto) || 0) + pesoUtilizado;
+                            const newStatus: Viñeta['status'] = Math.abs(newPesoNeto - (v.originalPesoNeto || 0)) < 0.005 ? 'En Bodega' : 'Mezclada Parcialmente';
+                            return { ...v, pesoNeto: newPesoNeto, status: newStatus };
+                        }
+                        return v;
+                    });
+                    updatePromises.push(api.updateDocument(collectionName, parentDoc.id, { [vignetteArrayKey]: updatedVignettes }));
                 }
             }
-
-            const updatePromises = Array.from(docsToUpdate.values()).map(item =>
-                api.updateDocument(item.type === 'Rendimiento' ? 'rendimientos' : 'reprocesos', item.doc.id, item.doc)
-            );
 
             await Promise.all(updatePromises);
             await api.deleteDocument('mezclas', mezclaToDelete.id);
             setMezclaToDelete(null);
         } catch (error) {
             console.error("Error deleting mezcla:", error);
-            alert("No se pudo eliminar la mezcla.");
+            addToast("No se pudo eliminar la mezcla.", 'error');
             setMezclaToDelete(null);
         }
     };
@@ -180,8 +192,6 @@ const MezclasPage: React.FC = () => {
     if (view === 'form') {
         return <MezclaForm 
             existingMezcla={mezclaToEdit} 
-            rendimientos={rendimientos}
-            reprocesos={reprocesos}
             onCancel={() => { setView('list'); setMezclaToEdit(null); }} 
             onSaveSuccess={handleSaveSuccess} 
         />;
@@ -221,7 +231,7 @@ const MezclasPage: React.FC = () => {
                             <tr><td colSpan={8} className="text-center py-10">Cargando mezclas...</td></tr>
                         ) : filteredMezclas.length > 0 ? (
                             filteredMezclas.map(mezcla => (
-                                <tr key={mezcla.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setMezclaToView(mezcla)}>
+                                <tr key={mezcla.id} data-id={mezcla.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => setMezclaToView(mezcla)}>
                                     <td className="px-6 py-4">{formatDate(mezcla.creationDate)}</td>
                                     <td className="px-6 py-4 font-medium text-purple-600">{mezcla.mezclaNumber}</td>
                                     <td className="px-6 py-4">{mezcla.tipoMezcla}</td>
